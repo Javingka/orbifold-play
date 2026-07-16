@@ -25,6 +25,8 @@ shape or a rhythm orbit, and immediately make something musical.
 - The artifact is a deliberate silhouette, not an infinite Tonnetz wallpaper.
 - Tap appends a chord to a visible progression. The unified transport plays the
   ordered progression and accepts live additions without restarting its clock.
+- The progression highlights the audible chord, fills its chip through the bar,
+  marks the next chord, and auto-follows longer sequences.
 - The active face, shared tones, and motion between chords are unmistakable.
 
 The existing `dim`, `aug`, and `pow` qualities are outside this first artifact.

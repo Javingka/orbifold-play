@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import * as Haptics from 'expo-haptics';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AsyncSkia } from '@/components/async-skia';
+import { HarmonySequence } from '@/components/harmony-sequence';
 import { StackedChips } from '@/components/stacked-chips';
 import type { RhythmOrbitLayer } from '@/components/rhythm-orbits';
 import {
+  getStrudelCycle,
   getStrudelPhase,
   playStrudel,
   prepareStrudelAudio,
@@ -319,39 +321,14 @@ export default function Page() {
       </View>
 
       {view === 'harmony' ? (
-        <View style={styles.sequencePanel}>
-          <ScrollView
-            horizontal
-            contentContainerStyle={styles.sequenceContent}
-            showsHorizontalScrollIndicator={false}
-          >
-            {sequence.length === 0 ? (
-              <Text style={styles.sequenceEmpty}>YOUR CHORD SEQUENCE</Text>
-            ) : (
-              sequence.map((face, index) => (
-                <Pressable
-                  key={`${face.id}:${index}`}
-                  accessibilityLabel={`Remove ${chordLabel(face)} from position ${index + 1}`}
-                  accessibilityRole="button"
-                  onPress={() => handleRemoveChord(index)}
-                  style={styles.sequenceChip}
-                >
-                  <Text style={styles.sequenceIndex}>{index + 1}</Text>
-                  <Text style={styles.sequenceLabel}>{chordLabel(face)}</Text>
-                </Pressable>
-              ))
-            )}
-          </ScrollView>
-          {sequence.length > 0 ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={handleClearSequence}
-              style={styles.clearButton}
-            >
-              <Text style={styles.clearText}>CLEAR</Text>
-            </Pressable>
-          ) : null}
-        </View>
+        <HarmonySequence
+          getCycle={getStrudelCycle}
+          isPlaying={transport === 'playing' && harmonyIncluded}
+          labelFor={chordLabel}
+          onClear={handleClearSequence}
+          onRemove={handleRemoveChord}
+          sequence={sequence}
+        />
       ) : null}
 
       <View style={styles.controls}>
@@ -452,32 +429,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textAlign: 'center',
   },
-  sequencePanel: {
-    height: 48,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 18,
-    gap: 8,
-  },
-  sequenceContent: { alignItems: 'center', gap: 7, paddingRight: 4 },
-  sequenceEmpty: { color: '#4f5768', fontSize: 9, fontWeight: '700', letterSpacing: 1.4 },
-  sequenceChip: {
-    minWidth: 54,
-    height: 34,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    borderRadius: 17,
-    backgroundColor: '#151923',
-    borderWidth: 1,
-    borderColor: '#303849',
-  },
-  sequenceIndex: { color: '#697184', fontSize: 8, fontWeight: '800' },
-  sequenceLabel: { color: '#f7f8ff', fontSize: 12, fontWeight: '700' },
-  clearButton: { paddingHorizontal: 8, paddingVertical: 9 },
-  clearText: { color: '#e87bac', fontSize: 8, fontWeight: '800', letterSpacing: 1.1 },
   controls: { alignItems: 'flex-start', paddingHorizontal: 18, paddingTop: 7, paddingBottom: 14 },
   chip: {
     minWidth: 116,

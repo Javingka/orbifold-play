@@ -29,6 +29,8 @@ opening a settings panel or reading instructions.
 
 - Render the 24-face artifact as one responsive Skia canvas.
 - Tap faces to append chords to an ordered, removable progression.
+- Show an audio-clock playhead across the progression: active chord, within-bar
+  progress, next chord, and auto-follow for off-screen chords.
 - Play the progression from the unified transport and accept live additions
   without restarting the scheduler clock.
 - Animate selection, shared-tone edges, and voice-leading travel.

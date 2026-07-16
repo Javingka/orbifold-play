@@ -16,6 +16,10 @@ export function strudelIsPlaying(): boolean {
   return false;
 }
 
+export function getStrudelCycle(): number | null {
+  return null;
+}
+
 export function getStrudelPhase(): number | null {
   return null;
 }
