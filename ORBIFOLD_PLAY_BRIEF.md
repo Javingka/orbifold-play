@@ -22,7 +22,10 @@ shape or a rhythm orbit, and immediately make something musical.
 
 - A finite Tonnetz artifact containing exactly 24 triangular faces: the 12 major
   and 12 minor pitch-class triads, each represented once.
-- The artifact is a deliberate silhouette, not an infinite Tonnetz wallpaper.
+- The artifact is a deliberate 5–7–7–5 Hexagon Tonnetz silhouette, not an
+  infinite Tonnetz wallpaper.
+- A compact ReactICX-style Blur Carousel selects a C-rooted mode; diatonic faces
+  receive tonic, subdominant, and dominant colors while every chord stays playable.
 - Tap appends a chord to a visible progression. The unified transport plays the
   ordered progression and accepts live additions without restarting its clock.
 - The progression highlights the audible chord, fills its chip through the bar,
@@ -47,6 +50,8 @@ major and minor triads.
   Harmony and Rhythm into the same musical clock.
 - Harmony and Rhythm are pages of a ReactICX-style Parallax Carousel: swipe the
   instrument area or use the synchronized Gooey Switch to change views.
+- A persistent Harmony/Rhythm position indicator remains in the same place on
+  both pages.
 - Key, mode, sound, and tempo are secondary controls presented through the
   ReactICX Stacked Chips interaction.
 - The app respects reduced-motion and provides a non-WebGL failure message.

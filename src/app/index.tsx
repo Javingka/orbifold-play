@@ -14,7 +14,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { SkiaReady } from '@/components/async-skia';
 import { HarmonySequence } from '@/components/harmony-sequence';
 import { ParallaxCarousel } from '@/components/parallax-carousel';
+import { ScaleBlurCarousel, type ScaleCarouselOption } from '@/components/scale-blur-carousel';
 import { StackedChips } from '@/components/stacked-chips';
+import { ViewModeIndicator } from '@/components/view-mode-indicator';
 import type { RhythmOrbitLayer } from '@/components/rhythm-orbits';
 import {
   getStrudelCycle,
@@ -46,6 +48,22 @@ const RhythmOrbits = React.lazy(async () => {
 const NOTE_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'] as const;
 const BPM = 120;
 const MAX_SEQUENCE_LENGTH = 16;
+const SCALE_OPTIONS: readonly ScaleCarouselOption[] = [
+  { id: 'c-major', rootPc: 0, mode: 'major', title: 'C MAJOR', subtitle: 'IONIAN' },
+  { id: 'c-minor', rootPc: 0, mode: 'minor', title: 'C MINOR', subtitle: 'AEOLIAN' },
+  { id: 'c-dorian', rootPc: 0, mode: 'dorian', title: 'C DORIAN', subtitle: '♭3 · ♮6' },
+  { id: 'c-phrygian', rootPc: 0, mode: 'phrygian', title: 'C PHRYGIAN', subtitle: '♭2 · ♭3' },
+  { id: 'c-lydian', rootPc: 0, mode: 'lydian', title: 'C LYDIAN', subtitle: '♯4' },
+  { id: 'c-mixolydian', rootPc: 0, mode: 'mixolydian', title: 'C MIXOLYD.', subtitle: '♭7' },
+  { id: 'c-locrian', rootPc: 0, mode: 'locrian', title: 'C LOCRIAN', subtitle: '♭2 · ♭5' },
+  {
+    id: 'c-harmonic-minor',
+    rootPc: 0,
+    mode: 'harmonic:minor',
+    title: 'C HARMONIC',
+    subtitle: 'MINOR · ♮7',
+  },
+];
 
 type InstrumentView = 'harmony' | 'rhythm';
 type TransportState = 'idle' | 'loading' | 'playing' | 'error';
@@ -99,13 +117,17 @@ function chordLabel(face: FiniteTonnetzFace): string {
 }
 
 export default function Page() {
-  const { width: screenWidth } = useWindowDimensions();
+  const { height: screenHeight, width: screenWidth } = useWindowDimensions();
+  const instrumentStageHeight = Math.max(270, Math.min(360, screenHeight * 0.43));
   const [view, setView] = useState<InstrumentView>('harmony');
   const [selected, setSelected] = useState<FiniteTonnetzFace | null>(null);
   const [sequence, setSequence] = useState<readonly FiniteTonnetzFace[]>([]);
   const [rhythmLayers, setRhythmLayers] = useState(INITIAL_RHYTHM_LAYERS);
   const [harmonyIncluded, setHarmonyIncluded] = useState(true);
   const [rhythmIncluded, setRhythmIncluded] = useState(true);
+  const [selectedScale, setSelectedScale] = useState<ScaleCarouselOption>(
+    SCALE_OPTIONS[0] as ScaleCarouselOption,
+  );
   const [transport, setTransport] = useState<TransportState>('idle');
   const [audioError, setAudioError] = useState<string | null>(null);
   const playbackRequest = useRef(0);
@@ -263,6 +285,14 @@ export default function Page() {
     void Haptics.selectionAsync();
   }, []);
 
+  const handleScaleSelect = useCallback((option: ScaleCarouselOption): void => {
+    setSelectedScale((current) => {
+      if (current.id === option.id) return current;
+      void Haptics.selectionAsync();
+      return option;
+    });
+  }, []);
+
   const selectedLabel = selected ? chordLabel(selected) : 'Build a sequence';
   const rhythmLabel = rhythmLayers
     .map((layer) => `E(${layer.steps.filter(Boolean).length},${layer.steps.length})`)
@@ -321,16 +351,32 @@ export default function Page() {
                   id: 'harmony',
                   content: (
                     <View style={styles.instrumentPage}>
-                      <View style={[styles.stage, styles.harmonyStage]}>
-                        <TonnetzArtifact
-                          selectedId={selected?.id ?? null}
-                          onSelect={handleChordSelect}
+                      <View
+                        style={[
+                          styles.stage,
+                          styles.harmonyStage,
+                          { height: instrumentStageHeight },
+                        ]}
+                      >
+                        <ScaleBlurCarousel
+                          onSelect={handleScaleSelect}
+                          options={SCALE_OPTIONS}
+                          selectedId={selectedScale.id}
                         />
+                        <View style={styles.hexagonArea}>
+                          <TonnetzArtifact
+                            selectedId={selected?.id ?? null}
+                            scaleMode={selectedScale.mode}
+                            scaleRootPc={selectedScale.rootPc}
+                            onSelect={handleChordSelect}
+                          />
+                        </View>
                       </View>
                       <View style={styles.readout}>
                         <Text style={styles.readoutValue}>{selectedLabel}</Text>
                         <Text style={styles.readoutHint}>TAP TRIANGLES · SWIPE FOR RHYTHM →</Text>
                       </View>
+                      <ViewModeIndicator active="harmony" />
                       <HarmonySequence
                         getCycle={getStrudelCycle}
                         isPlaying={transport === 'playing' && harmonyIncluded}
@@ -346,7 +392,13 @@ export default function Page() {
                   id: 'rhythm',
                   content: (
                     <View style={styles.instrumentPage}>
-                      <View style={[styles.stage, styles.rhythmStage]}>
+                      <View
+                        style={[
+                          styles.stage,
+                          styles.rhythmStage,
+                          { height: instrumentStageHeight },
+                        ]}
+                      >
                         <RhythmOrbits
                           getPhase={getStrudelPhase}
                           isPlaying={transport === 'playing' && rhythmIncluded}
@@ -360,13 +412,8 @@ export default function Page() {
                           ← SWIPE FOR HARMONY · {BPM} BPM · TOUCH THE ORBITS
                         </Text>
                       </View>
-                      <View style={styles.rhythmPageFooter}>
-                        <View style={styles.swipeRail}>
-                          <View style={styles.swipeRailDot} />
-                        </View>
-                        <Text style={styles.swipeLabel}>HARMONY</Text>
-                        <Text style={[styles.swipeLabel, styles.swipeLabelActive]}>RHYTHM</Text>
-                      </View>
+                      <ViewModeIndicator active="rhythm" />
+                      <View style={styles.pageFooterSpacer} />
                     </View>
                   ),
                 },
@@ -448,9 +495,10 @@ const styles = StyleSheet.create({
   transportText: { color: '#7f889c', fontSize: 9, fontWeight: '700', letterSpacing: 1.2 },
   carouselArea: { flex: 1, minHeight: 316 },
   instrumentPage: { flex: 1 },
-  stage: { flex: 1, minHeight: 220, overflow: 'hidden' },
+  stage: { flexShrink: 0, minHeight: 220, overflow: 'hidden' },
   harmonyStage: { backgroundColor: '#070911' },
   rhythmStage: { backgroundColor: '#060b0d' },
+  hexagonArea: { flex: 1, minHeight: 150 },
   readout: { alignItems: 'center', paddingHorizontal: 18, paddingVertical: 6 },
   readoutValue: {
     color: '#f7f8ff',
@@ -467,29 +515,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textAlign: 'center',
   },
-  rhythmPageFooter: {
-    height: 48,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  swipeRail: {
-    width: 26,
-    height: 4,
-    justifyContent: 'center',
-    borderRadius: 2,
-    backgroundColor: '#252b35',
-  },
-  swipeRailDot: {
-    width: 13,
-    height: 4,
-    alignSelf: 'flex-end',
-    borderRadius: 2,
-    backgroundColor: '#56cfc4',
-  },
-  swipeLabel: { color: '#4f5768', fontSize: 7, fontWeight: '800', letterSpacing: 0.8 },
-  swipeLabelActive: { color: '#56cfc4' },
+  pageFooterSpacer: { height: 48 },
   controls: { alignItems: 'flex-start', paddingHorizontal: 18, paddingTop: 7, paddingBottom: 14 },
   chip: {
     minWidth: 116,

@@ -27,7 +27,9 @@ opening a settings panel or reading instructions.
 
 ### 01.3 Harmony interaction
 
-- Render the 24-face artifact as one responsive Skia canvas.
+- Render the 24-face artifact as a responsive 5–7–7–5 Hexagon Tonnetz.
+- Adapt ReactICX Blur Carousel as a compact scale selector and color the finite
+  faces with the original tonic/subdominant/dominant classification.
 - Tap faces to append chords to an ordered, removable progression.
 - Show an audio-clock playhead across the progression: active chord, within-bar
   progress, next chord, and auto-follow for off-screen chords.
@@ -47,6 +49,7 @@ opening a settings panel or reading instructions.
 
 - Adapt ReactICX Parallax Carousel for a paged, swipeable Harmony/Rhythm stage
   and synchronize it with a Skia Gooey Switch in the header.
+- Keep a shared view-position indicator stable across both pages.
 - Adapt ReactICX Stacked Chips for key, mode, sound, and tempo.
 - Keep one Play/Stop transport visible in both views and expose Harmony/Rhythm
   inclusion toggles through the Stacked Chips interaction.
