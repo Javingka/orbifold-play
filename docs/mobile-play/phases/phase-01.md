@@ -45,7 +45,8 @@ opening a settings panel or reading instructions.
 
 ### 01.5 Controls and transport
 
-- Add a two-view swipe/morph transition.
+- Adapt ReactICX Parallax Carousel for a paged, swipeable Harmony/Rhythm stage
+  and synchronize it with a Skia Gooey Switch in the header.
 - Adapt ReactICX Stacked Chips for key, mode, sound, and tempo.
 - Keep one Play/Stop transport visible in both views and expose Harmony/Rhythm
   inclusion toggles through the Stacked Chips interaction.

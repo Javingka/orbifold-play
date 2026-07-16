@@ -45,6 +45,8 @@ major and minor triads.
 - Audio starts only after an explicit user gesture.
 - One Play/Stop transport remains visible in both views and independently routes
   Harmony and Rhythm into the same musical clock.
+- Harmony and Rhythm are pages of a ReactICX-style Parallax Carousel: swipe the
+  instrument area or use the synchronized Gooey Switch to change views.
 - Key, mode, sound, and tempo are secondary controls presented through the
   ReactICX Stacked Chips interaction.
 - The app respects reduced-motion and provides a non-WebGL failure message.

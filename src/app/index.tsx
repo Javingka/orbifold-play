@@ -1,11 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import * as Haptics from 'expo-haptics';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AsyncSkia } from '@/components/async-skia';
+import { SkiaReady } from '@/components/async-skia';
 import { HarmonySequence } from '@/components/harmony-sequence';
+import { ParallaxCarousel } from '@/components/parallax-carousel';
 import { StackedChips } from '@/components/stacked-chips';
 import type { RhythmOrbitLayer } from '@/components/rhythm-orbits';
 import {
@@ -25,6 +33,10 @@ import {
 const TonnetzArtifact = React.lazy(async () => {
   const module = await import('@/components/tonnetz-artifact');
   return { default: module.TonnetzArtifact };
+});
+const GooeyViewSwitch = React.lazy(async () => {
+  const module = await import('@/components/gooey-view-switch');
+  return { default: module.GooeyViewSwitch };
 });
 const RhythmOrbits = React.lazy(async () => {
   const module = await import('@/components/rhythm-orbits');
@@ -87,6 +99,7 @@ function chordLabel(face: FiniteTonnetzFace): string {
 }
 
 export default function Page() {
+  const { width: screenWidth } = useWindowDimensions();
   const [view, setView] = useState<InstrumentView>('harmony');
   const [selected, setSelected] = useState<FiniteTonnetzFace | null>(null);
   const [sequence, setSequence] = useState<readonly FiniteTonnetzFace[]>([]);
@@ -97,6 +110,7 @@ export default function Page() {
   const [audioError, setAudioError] = useState<string | null>(null);
   const playbackRequest = useRef(0);
   const playingRef = useRef(false);
+  const viewRef = useRef<InstrumentView>('harmony');
 
   useEffect(() => {
     prepareStrudelAudio();
@@ -242,6 +256,13 @@ export default function Page() {
     void Haptics.selectionAsync();
   };
 
+  const handleViewChange = useCallback((nextView: InstrumentView): void => {
+    if (viewRef.current === nextView) return;
+    viewRef.current = nextView;
+    setView(nextView);
+    void Haptics.selectionAsync();
+  }, []);
+
   const selectedLabel = selected ? chordLabel(selected) : 'Build a sequence';
   const rhythmLabel = rhythmLayers
     .map((layer) => `E(${layer.steps.filter(Boolean).length},${layer.steps.length})`)
@@ -268,22 +289,14 @@ export default function Page() {
             {view === 'harmony' ? 'Harmonic object' : 'Rhythm orbits'}
           </Text>
         </View>
-        <View style={styles.viewSwitch}>
-          {(['harmony', 'rhythm'] as const).map((candidate) => (
-            <Pressable
-              key={candidate}
-              accessibilityRole="button"
-              onPress={() => setView(candidate)}
-              style={[styles.viewButton, view === candidate && styles.viewButtonActive]}
-            >
-              <Text
-                style={[styles.viewButtonText, view === candidate && styles.viewButtonTextActive]}
-              >
-                {candidate === 'harmony' ? 'H' : 'R'}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+        <React.Suspense fallback={<View style={styles.switchFallback} />}>
+          <SkiaReady>
+            <GooeyViewSwitch
+              onToggle={(rhythmActive) => handleViewChange(rhythmActive ? 'rhythm' : 'harmony')}
+              rhythmActive={view === 'rhythm'}
+            />
+          </SkiaReady>
+        </React.Suspense>
       </View>
 
       <View style={styles.transportLine}>
@@ -297,39 +310,72 @@ export default function Page() {
         <Text style={styles.transportText}>{transportLabel}</Text>
       </View>
 
-      <View style={styles.stage}>
+      <View style={styles.carouselArea}>
         <React.Suspense fallback={<ActivityIndicator color="#8aa0ff" size="large" />}>
-          <AsyncSkia />
-          {view === 'harmony' ? (
-            <TonnetzArtifact selectedId={selected?.id ?? null} onSelect={handleChordSelect} />
-          ) : (
-            <RhythmOrbits
-              getPhase={getStrudelPhase}
-              isPlaying={transport === 'playing' && rhythmIncluded}
-              layers={rhythmLayers}
-              onToggleStep={handleToggleStep}
+          <SkiaReady>
+            <ParallaxCarousel
+              itemWidth={screenWidth}
+              onIndexChange={(index) => handleViewChange(index === 0 ? 'harmony' : 'rhythm')}
+              pages={[
+                {
+                  id: 'harmony',
+                  content: (
+                    <View style={styles.instrumentPage}>
+                      <View style={[styles.stage, styles.harmonyStage]}>
+                        <TonnetzArtifact
+                          selectedId={selected?.id ?? null}
+                          onSelect={handleChordSelect}
+                        />
+                      </View>
+                      <View style={styles.readout}>
+                        <Text style={styles.readoutValue}>{selectedLabel}</Text>
+                        <Text style={styles.readoutHint}>TAP TRIANGLES · SWIPE FOR RHYTHM →</Text>
+                      </View>
+                      <HarmonySequence
+                        getCycle={getStrudelCycle}
+                        isPlaying={transport === 'playing' && harmonyIncluded}
+                        labelFor={chordLabel}
+                        onClear={handleClearSequence}
+                        onRemove={handleRemoveChord}
+                        sequence={sequence}
+                      />
+                    </View>
+                  ),
+                },
+                {
+                  id: 'rhythm',
+                  content: (
+                    <View style={styles.instrumentPage}>
+                      <View style={[styles.stage, styles.rhythmStage]}>
+                        <RhythmOrbits
+                          getPhase={getStrudelPhase}
+                          isPlaying={transport === 'playing' && rhythmIncluded}
+                          layers={rhythmLayers}
+                          onToggleStep={handleToggleStep}
+                        />
+                      </View>
+                      <View style={styles.readout}>
+                        <Text style={styles.readoutValue}>{rhythmLabel}</Text>
+                        <Text style={styles.readoutHint}>
+                          ← SWIPE FOR HARMONY · {BPM} BPM · TOUCH THE ORBITS
+                        </Text>
+                      </View>
+                      <View style={styles.rhythmPageFooter}>
+                        <View style={styles.swipeRail}>
+                          <View style={styles.swipeRailDot} />
+                        </View>
+                        <Text style={styles.swipeLabel}>HARMONY</Text>
+                        <Text style={[styles.swipeLabel, styles.swipeLabelActive]}>RHYTHM</Text>
+                      </View>
+                    </View>
+                  ),
+                },
+              ]}
+              selectedIndex={view === 'harmony' ? 0 : 1}
             />
-          )}
+          </SkiaReady>
         </React.Suspense>
       </View>
-
-      <View style={styles.readout}>
-        <Text style={styles.readoutValue}>{view === 'harmony' ? selectedLabel : rhythmLabel}</Text>
-        <Text style={styles.readoutHint}>
-          {view === 'harmony' ? 'TAP TRIANGLES TO APPEND' : `${BPM} BPM · TOUCH THE ORBITS`}
-        </Text>
-      </View>
-
-      {view === 'harmony' ? (
-        <HarmonySequence
-          getCycle={getStrudelCycle}
-          isPlaying={transport === 'playing' && harmonyIncluded}
-          labelFor={chordLabel}
-          onClear={handleClearSequence}
-          onRemove={handleRemoveChord}
-          sequence={sequence}
-        />
-      ) : null}
 
       <View style={styles.controls}>
         <StackedChips>
@@ -383,24 +429,12 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     marginTop: 4,
   },
-  viewSwitch: {
-    flexDirection: 'row',
-    padding: 3,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#292e39',
-    backgroundColor: '#0c0e13',
+  switchFallback: {
+    width: 72,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#171a21',
   },
-  viewButton: {
-    width: 30,
-    height: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 15,
-  },
-  viewButtonActive: { backgroundColor: '#f7f8ff' },
-  viewButtonText: { color: '#788195', fontSize: 10, fontWeight: '800' },
-  viewButtonTextActive: { color: '#08090c' },
   transportLine: {
     minHeight: 24,
     flexDirection: 'row',
@@ -412,7 +446,11 @@ const styles = StyleSheet.create({
   transportDotPlaying: { backgroundColor: '#56cfc4' },
   transportDotError: { backgroundColor: '#e87bac' },
   transportText: { color: '#7f889c', fontSize: 9, fontWeight: '700', letterSpacing: 1.2 },
-  stage: { flex: 1, minHeight: 220 },
+  carouselArea: { flex: 1, minHeight: 316 },
+  instrumentPage: { flex: 1 },
+  stage: { flex: 1, minHeight: 220, overflow: 'hidden' },
+  harmonyStage: { backgroundColor: '#070911' },
+  rhythmStage: { backgroundColor: '#060b0d' },
   readout: { alignItems: 'center', paddingHorizontal: 18, paddingVertical: 6 },
   readoutValue: {
     color: '#f7f8ff',
@@ -429,6 +467,29 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textAlign: 'center',
   },
+  rhythmPageFooter: {
+    height: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  swipeRail: {
+    width: 26,
+    height: 4,
+    justifyContent: 'center',
+    borderRadius: 2,
+    backgroundColor: '#252b35',
+  },
+  swipeRailDot: {
+    width: 13,
+    height: 4,
+    alignSelf: 'flex-end',
+    borderRadius: 2,
+    backgroundColor: '#56cfc4',
+  },
+  swipeLabel: { color: '#4f5768', fontSize: 7, fontWeight: '800', letterSpacing: 0.8 },
+  swipeLabelActive: { color: '#56cfc4' },
   controls: { alignItems: 'flex-start', paddingHorizontal: 18, paddingTop: 7, paddingBottom: 14 },
   chip: {
     minWidth: 116,
