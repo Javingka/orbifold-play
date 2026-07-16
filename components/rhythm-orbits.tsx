@@ -1,24 +1,64 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { Canvas, Circle, Group, Rect, SweepGradient, vec } from '@shopify/react-native-skia';
-import { useState } from 'react';
-import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { type LayoutChangeEvent, Pressable, StyleSheet, View } from 'react-native';
 
-const ORBITS = [
-  { steps: 16, hits: new Set([0, 4, 8, 12]), color: '#f3b15a' },
-  { steps: 12, hits: new Set([0, 3, 6, 9]), color: '#56cfc4' },
-  { steps: 8, hits: new Set([2, 6]), color: '#e87bac' },
-] as const;
+export interface RhythmOrbitLayer {
+  id: string;
+  label: string;
+  color: string;
+  steps: readonly number[];
+}
 
-export function RhythmOrbits() {
+interface RhythmOrbitsProps {
+  layers: readonly RhythmOrbitLayer[];
+  isPlaying: boolean;
+  bpm: number;
+  onToggleStep: (layerIndex: number, stepIndex: number) => void;
+}
+
+export function RhythmOrbits({ layers, isPlaying, bpm, onToggleStep }: RhythmOrbitsProps) {
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const [phase, setPhase] = useState(0);
 
   const handleLayout = (event: LayoutChangeEvent): void => {
     const { width, height } = event.nativeEvent.layout;
     setSize({ width, height });
   };
 
+  useEffect(() => {
+    if (!isPlaying) {
+      setPhase(0);
+      return undefined;
+    }
+    const startedAt = Date.now();
+    const barMs = 240_000 / bpm;
+    const timer = setInterval(() => {
+      setPhase(((Date.now() - startedAt) % barMs) / barMs);
+    }, 40);
+    return () => clearInterval(timer);
+  }, [bpm, isPlaying]);
+
   const center = { x: size.width / 2, y: size.height / 2 };
   const outerRadius = Math.min(size.width, size.height) * 0.38;
+  const geometry = useMemo(
+    () =>
+      layers.map((layer, layerIndex) => {
+        const radius = outerRadius - layerIndex * Math.max(34, outerRadius * 0.22);
+        return {
+          layer,
+          radius,
+          points: layer.steps.map((_, stepIndex) => {
+            const angle = (stepIndex / layer.steps.length) * Math.PI * 2 - Math.PI / 2;
+            return {
+              x: center.x + Math.cos(angle) * radius,
+              y: center.y + Math.sin(angle) * radius,
+            };
+          }),
+        };
+      }),
+    [center.x, center.y, layers, outerRadius],
+  );
 
   return (
     <View style={styles.container} onLayout={handleLayout}>
@@ -29,38 +69,70 @@ export function RhythmOrbits() {
             colors={['#050609', '#11101a', '#071318', '#050609']}
           />
         </Rect>
-        {ORBITS.map((orbit, orbitIndex) => {
-          const radius = outerRadius - orbitIndex * Math.max(34, outerRadius * 0.22);
+        {geometry.map(({ layer, radius, points }) => {
+          const currentStep = Math.floor(phase * layer.steps.length) % layer.steps.length;
           return (
-            <Group key={orbit.steps}>
+            <Group key={layer.id}>
               <Circle
                 cx={center.x}
                 cy={center.y}
                 r={radius}
-                color={orbit.color}
+                color={layer.color}
                 style="stroke"
                 strokeWidth={1}
-                opacity={0.24}
+                opacity={0.3}
               />
-              {Array.from({ length: orbit.steps }, (_, step) => {
-                const angle = (step / orbit.steps) * Math.PI * 2 - Math.PI / 2;
-                const active = orbit.hits.has(step);
+              {points.map((point, stepIndex) => {
+                const active = layer.steps[stepIndex] === 1;
+                const current = isPlaying && stepIndex === currentStep;
                 return (
-                  <Circle
-                    key={step}
-                    cx={center.x + Math.cos(angle) * radius}
-                    cy={center.y + Math.sin(angle) * radius}
-                    r={active ? 6.5 : 2.8}
-                    color={active ? orbit.color : '#526071'}
-                    opacity={active ? 0.95 : 0.5}
-                  />
+                  <Group key={stepIndex}>
+                    {current ? (
+                      <Circle
+                        cx={point.x}
+                        cy={point.y}
+                        r={active ? 11 : 8}
+                        color="#ffffff"
+                        style="stroke"
+                        strokeWidth={1.5}
+                        opacity={0.8}
+                      />
+                    ) : null}
+                    <Circle
+                      cx={point.x}
+                      cy={point.y}
+                      r={active ? 6.5 : 3.2}
+                      color={active ? layer.color : '#526071'}
+                      opacity={active ? 1 : 0.55}
+                    />
+                  </Group>
                 );
               })}
             </Group>
           );
         })}
-        <Circle cx={center.x} cy={center.y} r={4} color="#f7f8ff" />
+        <Circle cx={center.x} cy={center.y} r={4} color={isPlaying ? '#f7f8ff' : '#697184'} />
       </Canvas>
+
+      <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+        {geometry.flatMap(({ layer, points }, layerIndex) =>
+          points.map((point, stepIndex) => (
+            <Pressable
+              key={`${layer.id}:${stepIndex}`}
+              accessibilityLabel={`${layer.label} step ${stepIndex + 1}`}
+              accessibilityRole="button"
+              onPress={() => onToggleStep(layerIndex, stepIndex)}
+              style={[
+                styles.stepTarget,
+                {
+                  left: point.x - 21,
+                  top: point.y - 21,
+                },
+              ]}
+            />
+          )),
+        )}
+      </View>
     </View>
   );
 }
@@ -69,5 +141,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     minHeight: 280,
+  },
+  stepTarget: {
+    position: 'absolute',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
   },
 });

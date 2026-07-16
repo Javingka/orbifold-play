@@ -1,13 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { Canvas, Group, Path, Rect, Skia, SweepGradient, vec } from '@shopify/react-native-skia';
 import { useMemo, useState } from 'react';
-import {
-  type GestureResponderEvent,
-  type LayoutChangeEvent,
-  Pressable,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { type LayoutChangeEvent, Pressable, StyleSheet, View } from 'react-native';
 
 import {
   createFiniteTonnetz,
@@ -32,16 +26,6 @@ interface TonnetzArtifactProps {
 }
 
 const FACES = createFiniteTonnetz();
-
-function contains(point: Point, triangle: readonly [Point, Point, Point]): boolean {
-  const [a, b, c] = triangle;
-  const denominator = (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y);
-  if (denominator === 0) return false;
-
-  const u = ((b.y - c.y) * (point.x - c.x) + (c.x - b.x) * (point.y - c.y)) / denominator;
-  const v = ((c.y - a.y) * (point.x - c.x) + (a.x - c.x) * (point.y - c.y)) / denominator;
-  return u >= 0 && v >= 0 && u + v <= 1;
-}
 
 function makeRenderFaces(width: number, height: number): readonly RenderFace[] {
   const padding = 20;
@@ -89,23 +73,6 @@ export function TonnetzArtifact({ selectedId, onSelect }: TonnetzArtifactProps) 
     setSize({ width, height });
   };
 
-  const handlePress = (event: GestureResponderEvent): void => {
-    const point = { x: event.nativeEvent.locationX, y: event.nativeEvent.locationY };
-    const exactHit = renderFaces.find((candidate) => contains(point, candidate.points));
-    const hit =
-      exactHit ??
-      renderFaces.reduce<RenderFace | null>((nearest, candidate) => {
-        if (!nearest) return candidate;
-        const candidateDistance = Math.hypot(
-          candidate.center.x - point.x,
-          candidate.center.y - point.y,
-        );
-        const nearestDistance = Math.hypot(nearest.center.x - point.x, nearest.center.y - point.y);
-        return candidateDistance < nearestDistance ? candidate : nearest;
-      }, null);
-    if (hit) onSelect(hit.face);
-  };
-
   return (
     <View style={styles.container} onLayout={handleLayout}>
       <Canvas style={StyleSheet.absoluteFill}>
@@ -141,11 +108,23 @@ export function TonnetzArtifact({ selectedId, onSelect }: TonnetzArtifactProps) 
           })}
         </Group>
       </Canvas>
-      <Pressable
-        accessibilityLabel="Playable 24 chord Tonnetz"
-        onPress={handlePress}
-        style={StyleSheet.absoluteFill}
-      />
+      <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+        {renderFaces.map(({ face, center }) => (
+          <Pressable
+            key={face.id}
+            accessibilityLabel={`Play chord ${face.rootPc} ${face.quality}`}
+            accessibilityRole="button"
+            onPress={() => onSelect(face)}
+            style={[
+              styles.faceTarget,
+              {
+                left: center.x - 18,
+                top: center.y - 18,
+              },
+            ]}
+          />
+        ))}
+      </View>
     </View>
   );
 }
@@ -154,5 +133,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     minHeight: 280,
+  },
+  faceTarget: {
+    position: 'absolute',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
   },
 });

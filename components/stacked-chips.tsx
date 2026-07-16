@@ -63,7 +63,12 @@ function Trigger({ children, onPress }: TriggerProps) {
   };
 
   return (
-    <Pressable onPress={handlePress} onLayout={handleLayout} style={{ zIndex: 100 - depth }}>
+    <Pressable
+      accessibilityRole="button"
+      onPress={handlePress}
+      onLayout={handleLayout}
+      style={{ zIndex: 100 - depth }}
+    >
       <View>
         {children}
         {depth > 0 ? (
