@@ -5,7 +5,13 @@ node_modules/
 # Build output
 dist/
 build/
+web-build/
+.expo/
 *.tsbuildinfo
+
+# Expo generated types
+expo-env.d.ts
+public/canvaskit.wasm
 
 # Test / coverage
 coverage/

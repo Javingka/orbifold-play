@@ -1,0 +1,9 @@
+{
+  "short_name": "Orbifold Play",
+  "name": "Orbifold Play — Harmony and Rhythm Instrument",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#050609",
+  "theme_color": "#050609",
+  "orientation": "portrait"
+}

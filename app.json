@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "Orbifold Play",
+    "slug": "orbifold-play",
+    "scheme": "orbifold-play",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "plugins": ["expo-router"],
+    "web": {
+      "output": "single",
+      "bundler": "metro"
+    }
+  }
+}
