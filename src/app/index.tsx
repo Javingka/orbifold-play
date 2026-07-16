@@ -1,18 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import * as Haptics from 'expo-haptics';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SkiaReady } from '@/components/async-skia';
 import { HarmonySequence } from '@/components/harmony-sequence';
+import { MorphLoader } from '@/components/morph-loader';
 import { ParallaxCarousel } from '@/components/parallax-carousel';
 import { ScaleBlurCarousel, type ScaleCarouselOption } from '@/components/scale-blur-carousel';
 import { StackedChips } from '@/components/stacked-chips';
@@ -341,7 +335,7 @@ export default function Page() {
       </View>
 
       <View style={styles.carouselArea}>
-        <React.Suspense fallback={<ActivityIndicator color="#8aa0ff" size="large" />}>
+        <React.Suspense fallback={<MorphLoader />}>
           <SkiaReady>
             <ParallaxCarousel
               itemWidth={screenWidth}

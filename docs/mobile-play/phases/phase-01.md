@@ -58,6 +58,7 @@ opening a settings panel or reading instructions.
 ### 01.6 Mobile verification
 
 - Verify representative narrow and wide phone viewports.
+- Show a reduced-motion-aware Morph Loader until CanvasKit is ready.
 - Verify audio unlock, chord/rhythm playback, tempo, queued changes, and Stop.
 - Verify a clear fallback when the GPU surface cannot initialize.
 - Run test, lint, typecheck, and web export cleanly.

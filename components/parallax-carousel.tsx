@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Adapted from ReactICX Parallax Carousel for arbitrary interactive instrument pages.
 import React, { useEffect, useRef } from 'react';
-import type { FlatList, ViewToken } from 'react-native';
+import type { FlatList, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
   Extrapolation,
   interpolate,
-  useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
   type SharedValue,
@@ -70,28 +69,37 @@ export function ParallaxCarousel({
 }: ParallaxCarouselProps) {
   const scrollX = useSharedValue(0);
   const listRef = useRef<FlatList<ParallaxCarouselPage>>(null);
-  const selectedIndexRef = useRef(selectedIndex);
   const onIndexChangeRef = useRef(onIndexChange);
+  const visibleIndexRef = useRef(selectedIndex);
+  const itemWidthRef = useRef(itemWidth);
 
-  selectedIndexRef.current = selectedIndex;
   onIndexChangeRef.current = onIndexChange;
 
-  const onScroll = useAnimatedScrollHandler({
-    onScroll: (event) => {
-      scrollX.value = event.contentOffset.x;
-    },
-  });
+  const reportIndex = (nextIndex: number): void => {
+    if (visibleIndexRef.current === nextIndex) return;
+    visibleIndexRef.current = nextIndex;
+    onIndexChangeRef.current(nextIndex);
+  };
 
-  const onViewableItemsChanged = useRef(
-    ({ viewableItems }: { viewableItems: ViewToken<ParallaxCarouselPage>[] }) => {
-      const visible = viewableItems.find((item) => item.isViewable && item.index !== null);
-      if (visible?.index !== null && visible?.index !== undefined) {
-        onIndexChangeRef.current(visible.index);
-      }
-    },
-  ).current;
+  const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>): void => {
+    const offset = event.nativeEvent.contentOffset.x;
+    scrollX.value = offset;
+    reportIndex(Math.max(0, Math.min(pages.length - 1, Math.round(offset / itemWidth))));
+  };
+
+  const commitVisiblePage = (event: NativeSyntheticEvent<NativeScrollEvent>): void => {
+    const nextIndex = Math.max(
+      0,
+      Math.min(pages.length - 1, Math.round(event.nativeEvent.contentOffset.x / itemWidth)),
+    );
+    reportIndex(nextIndex);
+  };
 
   useEffect(() => {
+    const widthChanged = itemWidthRef.current !== itemWidth;
+    itemWidthRef.current = itemWidth;
+    if (visibleIndexRef.current === selectedIndex && !widthChanged) return;
+    visibleIndexRef.current = selectedIndex;
     listRef.current?.scrollToOffset({
       animated: true,
       offset: selectedIndex * itemWidth,
@@ -106,8 +114,9 @@ export function ParallaxCarousel({
         decelerationRate="fast"
         horizontal
         keyExtractor={(page) => page.id}
+        onMomentumScrollEnd={commitVisiblePage}
         onScroll={onScroll}
-        onViewableItemsChanged={onViewableItemsChanged}
+        onScrollEndDrag={commitVisiblePage}
         pagingEnabled
         renderItem={({ item, index }) => (
           <ParallaxPage
@@ -121,7 +130,6 @@ export function ParallaxCarousel({
         scrollEventThrottle={16}
         showsHorizontalScrollIndicator={false}
         style={styles.list}
-        viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
       />
     </View>
   );

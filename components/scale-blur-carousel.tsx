@@ -42,10 +42,10 @@ const ITEM_WIDTH = 104;
 function ScaleCard({ index, item, onPress, scrollX, selected }: ScaleCardProps) {
   const inputRange = [(index - 1) * ITEM_WIDTH, index * ITEM_WIDTH, (index + 1) * ITEM_WIDTH];
   const animatedStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(scrollX.value, inputRange, [0.48, 1, 0.48], Extrapolation.CLAMP),
+    opacity: interpolate(scrollX.value, inputRange, [0.72, 1, 0.72], Extrapolation.CLAMP),
     transform: [
       {
-        scale: interpolate(scrollX.value, inputRange, [0.86, 1, 0.86], Extrapolation.CLAMP),
+        scale: interpolate(scrollX.value, inputRange, [0.92, 1, 0.92], Extrapolation.CLAMP),
       },
     ],
   }));
@@ -61,7 +61,7 @@ function ScaleCard({ index, item, onPress, scrollX, selected }: ScaleCardProps) 
         <Text style={[styles.title, selected && styles.titleSelected]}>{item.title}</Text>
         <Text style={styles.subtitle}>{item.subtitle}</Text>
         <BlurView
-          intensity={selected ? 0 : 18}
+          intensity={selected ? 0 : 4}
           pointerEvents="none"
           style={StyleSheet.absoluteFill}
           tint="dark"

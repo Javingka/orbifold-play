@@ -74,7 +74,7 @@ function Trigger({ children, onPress }: TriggerProps) {
         {depth > 0 ? (
           <BlurView
             pointerEvents="none"
-            intensity={parentIsOpen ? 6 : 0}
+            intensity={parentIsOpen ? 4 : 0}
             style={[StyleSheet.absoluteFill, styles.blur]}
           />
         ) : null}
@@ -110,7 +110,7 @@ function Content({ children }: ChildrenProps) {
       {Children.only(children)}
       <BlurView
         pointerEvents="none"
-        intensity={isOpen ? 6 : 0}
+        intensity={isOpen ? 4 : 0}
         style={[StyleSheet.absoluteFill, styles.blur]}
       />
     </Animated.View>

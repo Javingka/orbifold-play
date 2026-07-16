@@ -52,6 +52,8 @@ major and minor triads.
   instrument area or use the synchronized Gooey Switch to change views.
 - A persistent Harmony/Rhythm position indicator remains in the same place on
   both pages.
+- A ReactICX-inspired Morph Loader covers the initial HTML, JavaScript, and
+  CanvasKit preparation window, then yields only when the instrument is ready.
 - Key, mode, sound, and tempo are secondary controls presented through the
   ReactICX Stacked Chips interaction.
 - The app respects reduced-motion and provides a non-WebGL failure message.
