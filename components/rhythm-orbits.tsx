@@ -13,11 +13,11 @@ export interface RhythmOrbitLayer {
 interface RhythmOrbitsProps {
   layers: readonly RhythmOrbitLayer[];
   isPlaying: boolean;
-  bpm: number;
+  getPhase: () => number | null;
   onToggleStep: (layerIndex: number, stepIndex: number) => void;
 }
 
-export function RhythmOrbits({ layers, isPlaying, bpm, onToggleStep }: RhythmOrbitsProps) {
+export function RhythmOrbits({ layers, isPlaying, getPhase, onToggleStep }: RhythmOrbitsProps) {
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [phase, setPhase] = useState(0);
 
@@ -31,13 +31,12 @@ export function RhythmOrbits({ layers, isPlaying, bpm, onToggleStep }: RhythmOrb
       setPhase(0);
       return undefined;
     }
-    const startedAt = Date.now();
-    const barMs = 240_000 / bpm;
     const timer = setInterval(() => {
-      setPhase(((Date.now() - startedAt) % barMs) / barMs);
-    }, 40);
+      const schedulerPhase = getPhase();
+      if (schedulerPhase !== null) setPhase(schedulerPhase);
+    }, 32);
     return () => clearInterval(timer);
-  }, [bpm, isPlaying]);
+  }, [getPhase, isPlaying]);
 
   const center = { x: size.width / 2, y: size.height / 2 };
   const outerRadius = Math.min(size.width, size.height) * 0.38;

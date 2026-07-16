@@ -28,7 +28,9 @@ opening a settings panel or reading instructions.
 ### 01.3 Harmony interaction
 
 - Render the 24-face artifact as one responsive Skia canvas.
-- Tap and drag across faces to play chords after audio unlock.
+- Tap faces to append chords to an ordered, removable progression.
+- Play the progression from the unified transport and accept live additions
+  without restarting the scheduler clock.
 - Animate selection, shared-tone edges, and voice-leading travel.
 - Provide reduced-motion behavior and reliable touch hit-testing.
 
@@ -43,7 +45,8 @@ opening a settings panel or reading instructions.
 
 - Add a two-view swipe/morph transition.
 - Adapt ReactICX Stacked Chips for key, mode, sound, and tempo.
-- Keep playing state and Stop visible in both views.
+- Keep one Play/Stop transport visible in both views and expose Harmony/Rhythm
+  inclusion toggles through the Stacked Chips interaction.
 - Queue live changes on the next cycle.
 
 ### 01.6 Mobile verification
@@ -64,6 +67,7 @@ opening a settings panel or reading instructions.
 
 - Exactly 24 unique major/minor chords are directly playable from one finite
   on-screen object.
+- Triangle taps build an ordered progression that can be edited and played.
 - At least three independent Euclidean layers can play together and visibly show
   their current step.
 - The first sound is impossible before a user gesture.

@@ -23,8 +23,8 @@ shape or a rhythm orbit, and immediately make something musical.
 - A finite Tonnetz artifact containing exactly 24 triangular faces: the 12 major
   and 12 minor pitch-class triads, each represented once.
 - The artifact is a deliberate silhouette, not an infinite Tonnetz wallpaper.
-- Tap plays a chord. Dragging across adjacent faces plays a continuous harmonic
-  path with minimal voice-leading feedback.
+- Tap appends a chord to a visible progression. The unified transport plays the
+  ordered progression and accepts live additions without restarting its clock.
 - The active face, shared tones, and motion between chords are unmistakable.
 
 The existing `dim`, `aug`, and `pow` qualities are outside this first artifact.
@@ -41,7 +41,8 @@ major and minor triads.
 ### Shared controls
 
 - Audio starts only after an explicit user gesture.
-- Playing state and a Stop action remain visible in both views.
+- One Play/Stop transport remains visible in both views and independently routes
+  Harmony and Rhythm into the same musical clock.
 - Key, mode, sound, and tempo are secondary controls presented through the
   ReactICX Stacked Chips interaction.
 - The app respects reduced-motion and provides a non-WebGL failure message.

@@ -15,3 +15,7 @@ export function stopStrudel(): void {}
 export function strudelIsPlaying(): boolean {
   return false;
 }
+
+export function getStrudelPhase(): number | null {
+  return null;
+}

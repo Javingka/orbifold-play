@@ -5,6 +5,7 @@ import {
   Pattern,
   defaultPrebake,
   evaluate,
+  getAudioContext,
   initAudio,
   miniAllStrings,
   webaudioScheduler,
@@ -62,4 +63,18 @@ export function stopStrudel(): void {
 
 export function strudelIsPlaying(): boolean {
   return playing;
+}
+
+export function getStrudelPhase(): number | null {
+  if (!playing || !scheduler?.started) return null;
+  try {
+    const context = getAudioContext();
+    const outputDelaySeconds =
+      scheduler.latency + (context.baseLatency || 0) + (context.outputLatency || 0);
+    const audibleCycle = scheduler.now() - outputDelaySeconds * scheduler.cps;
+    const phase = ((audibleCycle % 1) + 1) % 1;
+    return Number.isFinite(phase) ? phase : null;
+  } catch {
+    return null;
+  }
 }

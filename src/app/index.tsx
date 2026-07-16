@@ -1,13 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import * as Haptics from 'expo-haptics';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AsyncSkia } from '@/components/async-skia';
 import { StackedChips } from '@/components/stacked-chips';
 import type { RhythmOrbitLayer } from '@/components/rhythm-orbits';
-import { playStrudel, prepareStrudelAudio, stopStrudel } from '@/packages/audio/src/strudel-engine';
+import {
+  getStrudelPhase,
+  playStrudel,
+  prepareStrudelAudio,
+  stopStrudel,
+} from '@/packages/audio/src/strudel-engine';
 import { bjorklund } from '@/packages/music-core/src/euclidean';
 import type { FiniteTonnetzFace } from '@/packages/music-core/src/finite-tonnetz';
 import {
@@ -26,6 +31,7 @@ const RhythmOrbits = React.lazy(async () => {
 
 const NOTE_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'] as const;
 const BPM = 120;
+const MAX_SEQUENCE_LENGTH = 16;
 
 type InstrumentView = 'harmony' | 'rhythm';
 type TransportState = 'idle' | 'loading' | 'playing' | 'error';
@@ -68,81 +74,138 @@ const INITIAL_RHYTHM_LAYERS: readonly AppRhythmLayer[] = [
 ];
 
 interface PlaybackSnapshot {
-  selected: FiniteTonnetzFace | null;
-  harmonyEnabled: boolean;
-  rhythmEnabled: boolean;
+  sequence: readonly FiniteTonnetzFace[];
+  harmonyIncluded: boolean;
+  rhythmIncluded: boolean;
   layers: readonly AppRhythmLayer[];
+}
+
+function chordLabel(face: FiniteTonnetzFace): string {
+  return `${NOTE_NAMES[face.rootPc]}${face.quality === 'min' ? 'm' : ''}`;
 }
 
 export default function Page() {
   const [view, setView] = useState<InstrumentView>('harmony');
   const [selected, setSelected] = useState<FiniteTonnetzFace | null>(null);
+  const [sequence, setSequence] = useState<readonly FiniteTonnetzFace[]>([]);
   const [rhythmLayers, setRhythmLayers] = useState(INITIAL_RHYTHM_LAYERS);
-  const [harmonyEnabled, setHarmonyEnabled] = useState(false);
-  const [rhythmEnabled, setRhythmEnabled] = useState(false);
+  const [harmonyIncluded, setHarmonyIncluded] = useState(true);
+  const [rhythmIncluded, setRhythmIncluded] = useState(true);
   const [transport, setTransport] = useState<TransportState>('idle');
   const [audioError, setAudioError] = useState<string | null>(null);
   const playbackRequest = useRef(0);
+  const playingRef = useRef(false);
 
   useEffect(() => {
     prepareStrudelAudio();
     return () => stopStrudel();
   }, []);
 
-  const applyPlayback = useCallback(async (snapshot: PlaybackSnapshot): Promise<void> => {
-    const request = ++playbackRequest.current;
-    const code = buildPlayablePattern({
-      ...(snapshot.harmonyEnabled && snapshot.selected
-        ? {
-            chord: {
-              rootPc: snapshot.selected.rootPc,
-              quality: snapshot.selected.quality,
-            },
-          }
-        : {}),
-      ...(snapshot.rhythmEnabled
-        ? {
-            rhythmLayers: snapshot.layers.map((layer) => ({
-              steps: layer.steps,
-              instrument: layer.instrument,
-              note: layer.note,
-              gain: layer.gain,
-              decay: layer.decay,
-              lpf: layer.lpf,
-            })),
-          }
-        : {}),
-    });
-
-    if (code === 'silence') {
-      stopStrudel();
-      setTransport('idle');
-      return;
-    }
-
+  const stopPlayback = useCallback((): void => {
+    playbackRequest.current += 1;
+    stopStrudel();
+    playingRef.current = false;
     setAudioError(null);
-    setTransport('loading');
-    const result = await playStrudel(code, BPM);
-    if (request !== playbackRequest.current) return;
-
-    if (result.ok) {
-      setTransport('playing');
-    } else {
-      setAudioError(result.error ?? 'Unknown audio error');
-      setTransport('error');
-    }
+    setTransport('idle');
   }, []);
 
-  const handleChordSelect = (face: FiniteTonnetzFace): void => {
-    setSelected(face);
-    setHarmonyEnabled(true);
-    void Haptics.selectionAsync();
-    void applyPlayback({
-      selected: face,
-      harmonyEnabled: true,
-      rhythmEnabled,
+  const applyPlayback = useCallback(
+    async (snapshot: PlaybackSnapshot): Promise<void> => {
+      const request = ++playbackRequest.current;
+      const code = buildPlayablePattern({
+        ...(snapshot.harmonyIncluded && snapshot.sequence.length > 0
+          ? {
+              chords: snapshot.sequence.map((face) => ({
+                rootPc: face.rootPc,
+                quality: face.quality,
+              })),
+            }
+          : {}),
+        ...(snapshot.rhythmIncluded
+          ? {
+              rhythmLayers: snapshot.layers.map((layer) => ({
+                steps: layer.steps,
+                instrument: layer.instrument,
+                note: layer.note,
+                gain: layer.gain,
+                decay: layer.decay,
+                lpf: layer.lpf,
+              })),
+            }
+          : {}),
+      });
+
+      if (code === 'silence') {
+        stopPlayback();
+        return;
+      }
+
+      const wasPlaying = playingRef.current;
+      setAudioError(null);
+      if (!wasPlaying) setTransport('loading');
+      const result = await playStrudel(code, BPM);
+      if (request !== playbackRequest.current) return;
+
+      if (result.ok) {
+        playingRef.current = true;
+        setTransport('playing');
+      } else {
+        stopStrudel();
+        playingRef.current = false;
+        setAudioError(result.error ?? 'Unknown audio error');
+        setTransport('error');
+      }
+    },
+    [stopPlayback],
+  );
+
+  const currentSnapshot = useCallback(
+    (overrides?: Partial<PlaybackSnapshot>): PlaybackSnapshot => ({
+      sequence,
+      harmonyIncluded,
+      rhythmIncluded,
       layers: rhythmLayers,
-    });
+      ...overrides,
+    }),
+    [harmonyIncluded, rhythmIncluded, rhythmLayers, sequence],
+  );
+
+  const handleTransportToggle = (): void => {
+    if (playingRef.current || transport === 'loading') {
+      stopPlayback();
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
+      return;
+    }
+    void applyPlayback(currentSnapshot());
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+
+  const handleChordSelect = (face: FiniteTonnetzFace): void => {
+    const nextSequence =
+      sequence.length >= MAX_SEQUENCE_LENGTH ? [...sequence.slice(1), face] : [...sequence, face];
+    setSelected(face);
+    setSequence(nextSequence);
+    void Haptics.selectionAsync();
+    if (playingRef.current && harmonyIncluded) {
+      void applyPlayback(currentSnapshot({ sequence: nextSequence }));
+    }
+  };
+
+  const handleRemoveChord = (index: number): void => {
+    const nextSequence = sequence.filter((_, currentIndex) => currentIndex !== index);
+    setSequence(nextSequence);
+    setSelected(nextSequence.at(-1) ?? null);
+    if (playingRef.current && harmonyIncluded) {
+      void applyPlayback(currentSnapshot({ sequence: nextSequence }));
+    }
+  };
+
+  const handleClearSequence = (): void => {
+    setSequence([]);
+    setSelected(null);
+    if (playingRef.current && harmonyIncluded) {
+      void applyPlayback(currentSnapshot({ sequence: [] }));
+    }
   };
 
   const handleToggleStep = (layerIndex: number, stepIndex: number): void => {
@@ -154,44 +217,45 @@ export default function Page() {
     });
 
     setRhythmLayers(nextLayers);
-    setRhythmEnabled(true);
     void Haptics.selectionAsync();
-    void applyPlayback({
-      selected,
-      harmonyEnabled,
-      rhythmEnabled: true,
-      layers: nextLayers,
-    });
+    if (playingRef.current && rhythmIncluded) {
+      void applyPlayback(currentSnapshot({ layers: nextLayers }));
+    }
   };
 
-  const handleStop = (): void => {
-    playbackRequest.current += 1;
-    stopStrudel();
-    setHarmonyEnabled(false);
-    setRhythmEnabled(false);
-    setAudioError(null);
-    setTransport('idle');
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
+  const handleChannelToggle = (channel: InstrumentView): void => {
+    if (channel === 'harmony') {
+      const next = !harmonyIncluded;
+      setHarmonyIncluded(next);
+      if (playingRef.current) {
+        void applyPlayback(currentSnapshot({ harmonyIncluded: next }));
+      }
+    } else {
+      const next = !rhythmIncluded;
+      setRhythmIncluded(next);
+      if (playingRef.current) {
+        void applyPlayback(currentSnapshot({ rhythmIncluded: next }));
+      }
+    }
+    void Haptics.selectionAsync();
   };
 
-  const chordLabel = selected
-    ? `${NOTE_NAMES[selected.rootPc]}${selected.quality === 'min' ? 'm' : ''}`
-    : 'Touch a face';
+  const selectedLabel = selected ? chordLabel(selected) : 'Build a sequence';
   const rhythmLabel = rhythmLayers
     .map((layer) => `E(${layer.steps.filter(Boolean).length},${layer.steps.length})`)
     .join(' · ');
-  const otherView: InstrumentView = view === 'harmony' ? 'rhythm' : 'harmony';
-  const stopEnabled = transport === 'loading' || transport === 'playing';
+  const masterActive = transport === 'loading' || transport === 'playing';
+  const soundingHarmony = harmonyIncluded && sequence.length > 0;
   const transportLabel =
     transport === 'loading'
       ? 'STARTING AUDIO…'
       : transport === 'error'
         ? `AUDIO ERROR · ${audioError ?? 'TRY AGAIN'}`
         : transport === 'playing'
-          ? `${harmonyEnabled ? 'HARMONY' : ''}${harmonyEnabled && rhythmEnabled ? ' + ' : ''}${rhythmEnabled ? 'RHYTHM' : ''} PLAYING`
-          : view === 'harmony'
-            ? 'TAP A TRIANGLE TO PLAY'
-            : 'TAP A STEP TO PLAY';
+          ? `${soundingHarmony ? 'HARMONY' : ''}${soundingHarmony && rhythmIncluded ? ' + ' : ''}${rhythmIncluded ? 'RHYTHM' : ''} PLAYING`
+          : sequence.length === 0
+            ? 'ADD CHORDS OR PLAY THE RHYTHM'
+            : `READY · ${sequence.length} CHORD${sequence.length === 1 ? '' : 'S'}`;
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'right', 'bottom', 'left']}>
@@ -202,15 +266,22 @@ export default function Page() {
             {view === 'harmony' ? 'Harmonic object' : 'Rhythm orbits'}
           </Text>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          disabled={!stopEnabled}
-          onPress={handleStop}
-          style={[styles.stopButton, !stopEnabled && styles.stopButtonDisabled]}
-        >
-          <View style={styles.stopIcon} />
-          <Text style={styles.stopText}>STOP</Text>
-        </Pressable>
+        <View style={styles.viewSwitch}>
+          {(['harmony', 'rhythm'] as const).map((candidate) => (
+            <Pressable
+              key={candidate}
+              accessibilityRole="button"
+              onPress={() => setView(candidate)}
+              style={[styles.viewButton, view === candidate && styles.viewButtonActive]}
+            >
+              <Text
+                style={[styles.viewButtonText, view === candidate && styles.viewButtonTextActive]}
+              >
+                {candidate === 'harmony' ? 'H' : 'R'}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
       </View>
 
       <View style={styles.transportLine}>
@@ -231,8 +302,8 @@ export default function Page() {
             <TonnetzArtifact selectedId={selected?.id ?? null} onSelect={handleChordSelect} />
           ) : (
             <RhythmOrbits
-              bpm={BPM}
-              isPlaying={transport === 'playing' && rhythmEnabled}
+              getPhase={getStrudelPhase}
+              isPlaying={transport === 'playing' && rhythmIncluded}
               layers={rhythmLayers}
               onToggleStep={handleToggleStep}
             />
@@ -241,30 +312,75 @@ export default function Page() {
       </View>
 
       <View style={styles.readout}>
-        <Text style={styles.readoutValue}>{view === 'harmony' ? chordLabel : rhythmLabel}</Text>
+        <Text style={styles.readoutValue}>{view === 'harmony' ? selectedLabel : rhythmLabel}</Text>
         <Text style={styles.readoutHint}>
-          {view === 'harmony' ? '24 PLAYABLE TRIADS' : `${BPM} BPM · TOUCH THE ORBITS`}
+          {view === 'harmony' ? 'TAP TRIANGLES TO APPEND' : `${BPM} BPM · TOUCH THE ORBITS`}
         </Text>
       </View>
 
+      {view === 'harmony' ? (
+        <View style={styles.sequencePanel}>
+          <ScrollView
+            horizontal
+            contentContainerStyle={styles.sequenceContent}
+            showsHorizontalScrollIndicator={false}
+          >
+            {sequence.length === 0 ? (
+              <Text style={styles.sequenceEmpty}>YOUR CHORD SEQUENCE</Text>
+            ) : (
+              sequence.map((face, index) => (
+                <Pressable
+                  key={`${face.id}:${index}`}
+                  accessibilityLabel={`Remove ${chordLabel(face)} from position ${index + 1}`}
+                  accessibilityRole="button"
+                  onPress={() => handleRemoveChord(index)}
+                  style={styles.sequenceChip}
+                >
+                  <Text style={styles.sequenceIndex}>{index + 1}</Text>
+                  <Text style={styles.sequenceLabel}>{chordLabel(face)}</Text>
+                </Pressable>
+              ))
+            )}
+          </ScrollView>
+          {sequence.length > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={handleClearSequence}
+              style={styles.clearButton}
+            >
+              <Text style={styles.clearText}>CLEAR</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+
       <View style={styles.controls}>
         <StackedChips>
-          <StackedChips.Trigger>
-            <View style={[styles.chip, styles.primaryChip]}>
-              <Text style={[styles.chipText, styles.primaryChipText]}>
-                {view === 'harmony' ? 'HARMONY' : 'RHYTHM'}
+          <StackedChips.Trigger onPress={handleTransportToggle}>
+            <View style={[styles.chip, masterActive ? styles.stopChip : styles.playChip]}>
+              <Text style={[styles.chipText, !masterActive && styles.playChipText]}>
+                {masterActive ? '■  STOP' : '▶  PLAY'}
               </Text>
-              <Text style={[styles.chipText, styles.primaryChipText]}>＋</Text>
+              <Text style={[styles.chipText, !masterActive && styles.playChipText]}>＋</Text>
             </View>
           </StackedChips.Trigger>
           <StackedChips.Content>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => setView(otherView)}
-              style={[styles.chip, styles.secondaryChip]}
-            >
-              <Text style={styles.chipText}>{otherView.toUpperCase()}</Text>
-            </Pressable>
+            <View style={styles.channelTray}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => handleChannelToggle('harmony')}
+                style={[styles.channelChip, harmonyIncluded && styles.harmonyChannelActive]}
+              >
+                <Text style={styles.channelText}>{harmonyIncluded ? 'HARMONY ✓' : 'HARMONY'}</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => handleChannelToggle('rhythm')}
+                style={[styles.channelChip, rhythmIncluded && styles.rhythmChannelActive]}
+              >
+                <Text style={styles.channelText}>{rhythmIncluded ? 'RHYTHM ✓' : 'RHYTHM'}</Text>
+              </Pressable>
+            </View>
           </StackedChips.Content>
         </StackedChips>
       </View>
@@ -273,11 +389,7 @@ export default function Page() {
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    minHeight: '100%',
-    backgroundColor: '#050609',
-  },
+  screen: { flex: 1, minHeight: '100%', backgroundColor: '#050609' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -286,12 +398,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 8,
   },
-  eyebrow: {
-    color: '#707a8f',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 2.2,
-  },
+  eyebrow: { color: '#707a8f', fontSize: 10, fontWeight: '700', letterSpacing: 2.2 },
   title: {
     color: '#f7f8ff',
     fontSize: 20,
@@ -299,19 +406,24 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     marginTop: 4,
   },
-  stopButton: {
+  viewSwitch: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    borderColor: '#4a3040',
-    borderWidth: 1,
+    padding: 3,
     borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#292e39',
+    backgroundColor: '#0c0e13',
   },
-  stopButtonDisabled: { opacity: 0.38 },
-  stopIcon: { width: 7, height: 7, borderRadius: 1, backgroundColor: '#e87bac' },
-  stopText: { color: '#c9ceda', fontSize: 9, fontWeight: '800', letterSpacing: 1.2 },
+  viewButton: {
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 15,
+  },
+  viewButtonActive: { backgroundColor: '#f7f8ff' },
+  viewButtonText: { color: '#788195', fontSize: 10, fontWeight: '800' },
+  viewButtonTextActive: { color: '#08090c' },
   transportLine: {
     minHeight: 24,
     flexDirection: 'row',
@@ -322,12 +434,12 @@ const styles = StyleSheet.create({
   transportDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#697184' },
   transportDotPlaying: { backgroundColor: '#56cfc4' },
   transportDotError: { backgroundColor: '#e87bac' },
-  transportText: { color: '#7f889c', fontSize: 9, fontWeight: '700', letterSpacing: 1.25 },
-  stage: { flex: 1, minHeight: 280 },
-  readout: { alignItems: 'center', paddingHorizontal: 18, paddingVertical: 8 },
+  transportText: { color: '#7f889c', fontSize: 9, fontWeight: '700', letterSpacing: 1.2 },
+  stage: { flex: 1, minHeight: 220 },
+  readout: { alignItems: 'center', paddingHorizontal: 18, paddingVertical: 6 },
   readoutValue: {
     color: '#f7f8ff',
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '300',
     letterSpacing: -0.8,
     textAlign: 'center',
@@ -336,22 +448,62 @@ const styles = StyleSheet.create({
     color: '#697184',
     fontSize: 9,
     fontWeight: '700',
-    letterSpacing: 1.8,
-    marginTop: 5,
+    letterSpacing: 1.7,
+    marginTop: 4,
     textAlign: 'center',
   },
-  controls: { alignItems: 'flex-start', paddingHorizontal: 18, paddingTop: 8, paddingBottom: 14 },
+  sequencePanel: {
+    height: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    gap: 8,
+  },
+  sequenceContent: { alignItems: 'center', gap: 7, paddingRight: 4 },
+  sequenceEmpty: { color: '#4f5768', fontSize: 9, fontWeight: '700', letterSpacing: 1.4 },
+  sequenceChip: {
+    minWidth: 54,
+    height: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    borderRadius: 17,
+    backgroundColor: '#151923',
+    borderWidth: 1,
+    borderColor: '#303849',
+  },
+  sequenceIndex: { color: '#697184', fontSize: 8, fontWeight: '800' },
+  sequenceLabel: { color: '#f7f8ff', fontSize: 12, fontWeight: '700' },
+  clearButton: { paddingHorizontal: 8, paddingVertical: 9 },
+  clearText: { color: '#e87bac', fontSize: 8, fontWeight: '800', letterSpacing: 1.1 },
+  controls: { alignItems: 'flex-start', paddingHorizontal: 18, paddingTop: 7, paddingBottom: 14 },
   chip: {
+    minWidth: 116,
     minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 18,
+    gap: 16,
     borderRadius: 999,
-    paddingHorizontal: 18,
+    paddingHorizontal: 17,
   },
-  primaryChip: { backgroundColor: '#f7f8ff', minWidth: 132 },
-  secondaryChip: { backgroundColor: '#20242d', marginLeft: 12, minWidth: 124 },
-  chipText: { color: '#f7f8ff', fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
-  primaryChipText: { color: '#08090c' },
+  playChip: { backgroundColor: '#f7f8ff' },
+  stopChip: { backgroundColor: '#3b2030' },
+  playChipText: { color: '#08090c' },
+  chipText: { color: '#f7f8ff', fontSize: 10, fontWeight: '800', letterSpacing: 1.1 },
+  channelTray: { flexDirection: 'row', gap: 6, marginLeft: 10 },
+  channelChip: {
+    height: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: '#20242d',
+    borderWidth: 1,
+    borderColor: '#303541',
+  },
+  harmonyChannelActive: { backgroundColor: '#4a3320', borderColor: '#f3b15a' },
+  rhythmChannelActive: { backgroundColor: '#153a38', borderColor: '#56cfc4' },
+  channelText: { color: '#f7f8ff', fontSize: 8, fontWeight: '800', letterSpacing: 0.7 },
 });
