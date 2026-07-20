@@ -6,6 +6,9 @@
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "plugins": ["expo-router"],
+    "experiments": {
+      "baseUrl": "/orbifold-play"
+    },
     "web": {
       "output": "single",
       "bundler": "metro"
