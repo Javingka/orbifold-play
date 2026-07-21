@@ -11,7 +11,7 @@ import {
 describe('fluid Tonnetz interaction model', () => {
   it('derives only the requested graph rings from canonical shared edges', () => {
     const faces = createFiniteTonnetz();
-    const origin = faces.find((face) => face.id === '1:1:maj');
+    const origin = faces.find((face) => face.id === '1:-2:maj');
     expect(origin).toBeDefined();
 
     const distances = resolveFluidTonnetzRings(faces, origin?.id ?? '', 2);

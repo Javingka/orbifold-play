@@ -55,24 +55,27 @@ function createFace(i: number, j: number, quality: TonnetzQuality): FiniteTonnet
 }
 
 /**
- * Centrally symmetric Diamond Tonnetz cut from the compact 4 × 3 fundamental
- * region. Two opposite boundary faces are replaced by their periodic Tonnetz
- * equivalents: (0,0,maj) → (0,3,maj) and (3,2,min) → (3,-1,min).
+ * Compact Diamond Tonnetz agreed for the mobile instrument.
  *
- * The cut keeps all 24 major/minor identities exactly once, while every face is
- * still derived from shared lattice vertices using pc(i,j) = 7i + 4j (mod 12).
- * This is the finite mobile silhouette; it is not a visual remapping of chords.
+ * Its vertex rows contain 1–4–5–5–4–1 notes. Every interior horizontal edge
+ * is the literal shared base of an opposite major/minor pair, so adjacent chord
+ * faces reuse the same Tonnetz vertices instead of merely repeating labels.
+ * The cut contains all 24 major/minor identities exactly once.
  */
 export function createFiniteTonnetz(): readonly FiniteTonnetzFace[] {
-  const faces: FiniteTonnetzFace[] = [createFace(3, -1, 'min')];
+  const faces: FiniteTonnetzFace[] = [createFace(0, 0, 'maj')];
 
-  for (let j = 0; j < 3; j += 1) {
-    for (let i = 0; i < 4; i += 1) {
-      if (!(i === 0 && j === 0)) faces.push(createFace(i, j, 'maj'));
-      if (!(i === 3 && j === 2)) faces.push(createFace(i, j, 'min'));
-    }
+  for (let i = 0; i < 4; i += 1) faces.push(createFace(i, -1, 'maj'));
+  for (let i = 0; i < 3; i += 1) faces.push(createFace(i, -1, 'min'));
+
+  for (let i = 0; i < 4; i += 1) {
+    faces.push(createFace(i, -2, 'maj'));
+    faces.push(createFace(i, -2, 'min'));
   }
 
-  faces.push(createFace(0, 3, 'maj'));
+  for (let i = 1; i < 4; i += 1) faces.push(createFace(i, -3, 'maj'));
+  for (let i = 0; i < 4; i += 1) faces.push(createFace(i, -3, 'min'));
+
+  faces.push(createFace(3, -4, 'min'));
   return faces;
 }

@@ -78,6 +78,49 @@ polygons remain fixed.
 
 ## Phase completion
 
-Phase 01 is complete. No ADR trigger fired, no dependency was added, and no
-change was made to Tonnetz identity, scale semantics, canonical hits, audio,
-sequence, rhythm, or saved data.
+## Step 01.3 — Restore compact topology and extend visual continuity
+
+Status: complete
+
+The finite model now uses the Pilot-approved compact lattice cut with vertex
+rows `1–4–5–5–4–1`. Its top C major and bottom A minor close the diamond; all
+interior horizontal bases are actual shared Tonnetz vertices for the opposite
+major/minor faces. The projection now exposes that relationship directly.
+
+The complete Tonnetz render/hit layer supports two-finger pinch and explicit
+`− / 1× / +` controls from 1× through 2×. Harmony-sequence badges use the same
+material resolver as their source faces and render as one lazy Skia strip. The
+playing badge has the radiant sweep and clock phase; the following badge is
+marked `NEXT`.
+
+### Acceptance Coverage Table
+
+| Acceptance | Evidence | Status |
+| --- | --- | --- |
+| A-01-01 | `finite-tonnetz.test.ts`: 24 identities, 20 shared vertices | Pass |
+| A-01-05 | Browser selection after zoom added exactly C then C♯ | Pass |
+| A-01-07 | No dependency/audio/rhythm change; Play/Stop completed | Pass |
+| A-01-09 | 23 tests, lint, typecheck, and web export passed | Pass |
+| A-01-10 | Exact pitch rows asserted in `finite-tonnetz.test.ts`; 390×844 visual matched the compact reference | Pass |
+| A-01-11 | 390×844 `+` control enlarged the complete Diamond; C remained selectable afterward | Pass |
+| A-01-12 | Browser showed orange C and violet C♯ badges; Play produced `NOW/NEXT`, radiant active edge, and advancing phase | Pass |
+
+### Validation
+
+- `pnpm test`: 6 files, 23 tests passed.
+- `pnpm lint`: passed.
+- `pnpm typecheck`: passed.
+- `pnpm build:web`: passed.
+- Browser 390×844: compact chord rows were C; A♭/Cm/E♭/Gm/B♭/Dm/F;
+  E/A♭m/B/E♭m/F♯/B♭m/C♯/Fm; Em/G/Bm/D/F♯m/A/C♯m; Am, with 20
+  visible shared-note badges.
+- Browser 390×844 after zoom: C and C♯ hit targets remained correct; the
+  sequence used matching Stack Glow gradients and the audio-clock playhead.
+- Browser console after clean server boot: zero errors; existing React Native
+  Web deprecation warnings remain outside this step.
+
+## Phase completion
+
+Phase 01 remains complete after the Pilot-authorized topology correction. No
+ADR trigger fired, no dependency was added, and chord identity, scale semantics,
+audio, rhythm, and saved data remain unchanged.

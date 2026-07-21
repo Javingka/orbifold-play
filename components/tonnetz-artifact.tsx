@@ -11,8 +11,9 @@ import {
   useClock,
   vec,
 } from '@shopify/react-native-skia';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  type GestureResponderEvent,
   type LayoutChangeEvent,
   Pressable,
   StyleSheet,
@@ -107,7 +108,15 @@ interface FluidLabelProps extends FaceMotionProps {
 const FACES = createFiniteTonnetz();
 const ROW_HEIGHT_RATIO = Math.sqrt(3) / 2;
 const FACE_INSET = 0.1;
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 2;
 const NOTE_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'] as const;
+
+function touchDistance(event: GestureResponderEvent): number | null {
+  const [first, second] = event.nativeEvent.touches;
+  if (!first || !second) return null;
+  return Math.hypot(second.pageX - first.pageX, second.pageY - first.pageY);
+}
 
 function chordLabel(face: FiniteTonnetzFace): string {
   return `${NOTE_NAMES[face.rootPc]}${face.quality === 'min' ? 'm' : ''}`;
@@ -118,11 +127,11 @@ function vertexKey(vertex: Pick<TonnetzVertex, 'i' | 'j'>): string {
 }
 
 function projectVertex(vertex: Pick<TonnetzVertex, 'i' | 'j'>): Point {
-  // The 60° lattice rotation keeps equilateral faces pointing up/down while
-  // giving the Diamond a wider, more legible footprint on a short phone stage.
+  // Horizontal Tonnetz edges remain horizontal: opposite major/minor faces
+  // therefore share their base exactly as in the approved compact Diamond.
   return {
-    x: vertex.i * 0.5 + vertex.j,
-    y: vertex.i * ROW_HEIGHT_RATIO,
+    x: vertex.i + vertex.j * 0.5,
+    y: -vertex.j * ROW_HEIGHT_RATIO,
   };
 }
 
@@ -474,8 +483,10 @@ export function TonnetzArtifact({
 }: TonnetzArtifactProps) {
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [interaction, setInteraction] = useState<InteractionState>({ faceId: null, token: 0 });
+  const pinchOrigin = useRef<{ distance: number; zoom: number } | null>(null);
   const reduceMotion = useReducedMotion();
   const clock = useClock();
+  const zoom = useSharedValue(1);
   const renderGeometry = useMemo(
     () => makeRenderGeometry(size.width, size.height),
     [size.height, size.width],
@@ -500,6 +511,7 @@ export function TonnetzArtifact({
     if (!selectedFace) return renderGeometry.faces;
     return [...renderGeometry.faces.filter(({ face }) => face.id !== selectedId), selectedFace];
   }, [renderGeometry.faces, selectedId]);
+  const zoomStyle = useAnimatedStyle(() => ({ transform: [{ scale: zoom.value }] }));
 
   const handleLayout = (event: LayoutChangeEvent): void => {
     const { width, height } = event.nativeEvent.layout;
@@ -511,28 +523,92 @@ export function TonnetzArtifact({
     onSelect(face);
   };
 
+  const handlePinchStart = (event: GestureResponderEvent): void => {
+    const distance = touchDistance(event);
+    if (distance === null) return;
+    pinchOrigin.current = { distance, zoom: zoom.value };
+  };
+
+  const handlePinchMove = (event: GestureResponderEvent): void => {
+    const distance = touchDistance(event);
+    if (distance === null) return;
+    if (pinchOrigin.current === null) {
+      pinchOrigin.current = { distance, zoom: zoom.value };
+      return;
+    }
+    const nextZoom = pinchOrigin.current.zoom * (distance / pinchOrigin.current.distance);
+    zoom.value = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextZoom));
+  };
+
+  const handlePinchEnd = (): void => {
+    pinchOrigin.current = null;
+  };
+
+  const setZoom = (nextZoom: number): void => {
+    zoom.value = withTiming(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextZoom)), {
+      duration: reduceMotion ? 0 : 220,
+      easing: Easing.out(Easing.cubic),
+    });
+  };
+
   return (
-    <View style={styles.container} onLayout={handleLayout}>
-      <Canvas style={StyleSheet.absoluteFill}>
-        <Rect x={0} y={0} width={size.width} height={size.height}>
-          <SweepGradient
-            c={vec(size.width * 0.52, size.height * 0.48)}
-            colors={['#050609', '#0d1421', '#090b12', '#050609']}
-          />
-        </Rect>
-        <Group>
-          {renderGeometry.faces.map(({ canonicalPath, face }) => (
-            <Path
-              key={`${face.id}:topology`}
-              color="#6D7690"
-              opacity={0.2}
-              path={canonicalPath}
-              strokeWidth={0.8}
-              style="stroke"
+    <View
+      onLayout={handleLayout}
+      onMoveShouldSetResponder={(event) => event.nativeEvent.touches.length >= 2}
+      onResponderGrant={handlePinchStart}
+      onResponderMove={handlePinchMove}
+      onResponderRelease={handlePinchEnd}
+      onResponderTerminate={handlePinchEnd}
+      onStartShouldSetResponder={(event) => event.nativeEvent.touches.length >= 2}
+      style={styles.container}
+    >
+      <Animated.View style={[StyleSheet.absoluteFill, zoomStyle]}>
+        <Canvas style={StyleSheet.absoluteFill}>
+          <Rect x={0} y={0} width={size.width} height={size.height}>
+            <SweepGradient
+              c={vec(size.width * 0.52, size.height * 0.48)}
+              colors={['#050609', '#0d1421', '#090b12', '#050609']}
             />
-          ))}
-        </Group>
-        <Group>
+          </Rect>
+          <Group>
+            {renderGeometry.faces.map(({ canonicalPath, face }) => (
+              <Path
+                key={`${face.id}:topology`}
+                color="#6D7690"
+                opacity={0.2}
+                path={canonicalPath}
+                strokeWidth={0.8}
+                style="stroke"
+              />
+            ))}
+          </Group>
+          <Group>
+            {orderedFaces.map((renderFace) => {
+              const selected = renderFace.face.id === selectedId;
+              const material = resolveFluidTonnetzMaterial(
+                renderFace.face,
+                scaleRootPc,
+                scaleMode,
+                selected,
+              );
+              return (
+                <FluidFace
+                  key={renderFace.face.id}
+                  clock={clock}
+                  distance={interactionRings.get(renderFace.face.id)}
+                  interactionToken={interaction.token}
+                  labelOpacityTarget={material.labelOpacity}
+                  material={material}
+                  materialOpacityTarget={material.opacity}
+                  reduceMotion={reduceMotion}
+                  renderFace={renderFace}
+                  selected={selected}
+                />
+              );
+            })}
+          </Group>
+        </Canvas>
+        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
           {orderedFaces.map((renderFace) => {
             const selected = renderFace.face.id === selectedId;
             const material = resolveFluidTonnetzMaterial(
@@ -542,9 +618,8 @@ export function TonnetzArtifact({
               selected,
             );
             return (
-              <FluidFace
-                key={renderFace.face.id}
-                clock={clock}
+              <FluidLabel
+                key={`${renderFace.face.id}:label`}
                 distance={interactionRings.get(renderFace.face.id)}
                 interactionToken={interaction.token}
                 labelOpacityTarget={material.labelOpacity}
@@ -556,76 +631,79 @@ export function TonnetzArtifact({
               />
             );
           })}
-        </Group>
-      </Canvas>
-      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        {orderedFaces.map((renderFace) => {
-          const selected = renderFace.face.id === selectedId;
-          const material = resolveFluidTonnetzMaterial(
-            renderFace.face,
-            scaleRootPc,
-            scaleMode,
-            selected,
-          );
-          return (
-            <FluidLabel
-              key={`${renderFace.face.id}:label`}
-              distance={interactionRings.get(renderFace.face.id)}
-              interactionToken={interaction.token}
-              labelOpacityTarget={material.labelOpacity}
-              material={material}
-              materialOpacityTarget={material.opacity}
-              reduceMotion={reduceMotion}
-              renderFace={renderFace}
-              selected={selected}
-            />
-          );
-        })}
-        {renderGeometry.nodes.map(({ key, pitchClass, point }) => {
-          const selected = selectedVertexKeys.has(key);
-          const nodeSize = Math.max(
-            15,
-            Math.min(20, (renderGeometry.faces[0]?.cellSize ?? 0) * 0.28),
-          );
-          return (
-            <View
-              key={key}
-              style={[
-                styles.noteBadge,
-                {
-                  borderColor: selected ? '#FFD166' : 'rgba(255, 255, 255, 0.82)',
-                  borderRadius: nodeSize / 2,
-                  borderWidth: selected ? 2 : 1,
-                  height: nodeSize,
-                  left: point.x - nodeSize / 2,
-                  opacity: selected ? 1 : 0.94,
-                  top: point.y - nodeSize / 2,
-                  width: nodeSize,
-                },
-              ]}
-            >
-              <Text
-                numberOfLines={1}
-                style={[styles.noteLabel, { fontSize: nodeSize * 0.48, lineHeight: nodeSize }]}
+          {renderGeometry.nodes.map(({ key, pitchClass, point }) => {
+            const selected = selectedVertexKeys.has(key);
+            const nodeSize = Math.max(
+              15,
+              Math.min(20, (renderGeometry.faces[0]?.cellSize ?? 0) * 0.28),
+            );
+            return (
+              <View
+                key={key}
+                style={[
+                  styles.noteBadge,
+                  {
+                    borderColor: selected ? '#FFD166' : 'rgba(255, 255, 255, 0.82)',
+                    borderRadius: nodeSize / 2,
+                    borderWidth: selected ? 2 : 1,
+                    height: nodeSize,
+                    left: point.x - nodeSize / 2,
+                    opacity: selected ? 1 : 0.94,
+                    top: point.y - nodeSize / 2,
+                    width: nodeSize,
+                  },
+                ]}
               >
-                {NOTE_NAMES[pitchClass]}
-              </Text>
-            </View>
-          );
-        })}
-      </View>
-      <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-        {renderGeometry.faces.map(({ face, hitStyle }) => (
-          <Pressable
-            key={face.id}
-            accessibilityLabel={`Play chord ${chordLabel(face)}, notes ${face.pitchClasses
-              .map((pitchClass) => NOTE_NAMES[pitchClass])
-              .join(', ')}`}
-            accessibilityRole="button"
-            onPress={() => handleFacePress(face)}
-            style={[styles.faceTarget, hitStyle]}
-          />
-        ))}
+                <Text
+                  numberOfLines={1}
+                  style={[styles.noteLabel, { fontSize: nodeSize * 0.48, lineHeight: nodeSize }]}
+                >
+                  {NOTE_NAMES[pitchClass]}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+        <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+          {renderGeometry.faces.map(({ face, hitStyle }) => (
+            <Pressable
+              key={face.id}
+              accessibilityLabel={`Play chord ${chordLabel(face)}, notes ${face.pitchClasses
+                .map((pitchClass) => NOTE_NAMES[pitchClass])
+                .join(', ')}`}
+              accessibilityRole="button"
+              onPress={() => handleFacePress(face)}
+              style={[styles.faceTarget, hitStyle]}
+            />
+          ))}
+        </View>
+      </Animated.View>
+      <View accessibilityRole="toolbar" style={styles.zoomControls}>
+        <Pressable
+          accessibilityLabel="Zoom out Tonnetz"
+          accessibilityRole="button"
+          onPress={() => setZoom(zoom.value - 0.25)}
+          style={styles.zoomButton}
+        >
+          <Text style={styles.zoomGlyph}>−</Text>
+        </Pressable>
+        <Pressable
+          accessibilityHint="Return the Diamond Tonnetz to its original size"
+          accessibilityLabel="Reset Tonnetz zoom"
+          accessibilityRole="button"
+          onPress={() => setZoom(1)}
+          style={[styles.zoomButton, styles.zoomResetButton]}
+        >
+          <Text style={styles.zoomResetText}>1×</Text>
+        </Pressable>
+        <Pressable
+          accessibilityLabel="Zoom in Tonnetz"
+          accessibilityRole="button"
+          onPress={() => setZoom(zoom.value + 0.25)}
+          style={styles.zoomButton}
+        >
+          <Text style={styles.zoomGlyph}>+</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -633,8 +711,10 @@ export function TonnetzArtifact({
 
 const styles = StyleSheet.create({
   container: {
+    backgroundColor: '#050609',
     flex: 1,
     minHeight: 150,
+    overflow: 'hidden',
   },
   faceTarget: {
     position: 'absolute',
@@ -667,5 +747,42 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: -0.45,
     textAlign: 'center',
+  },
+  zoomControls: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(13, 17, 27, 0.78)',
+    borderColor: 'rgba(138, 160, 255, 0.32)',
+    borderRadius: 15,
+    borderWidth: 1,
+    bottom: 8,
+    flexDirection: 'row',
+    height: 30,
+    overflow: 'hidden',
+    position: 'absolute',
+    right: 8,
+  },
+  zoomButton: {
+    alignItems: 'center',
+    height: 30,
+    justifyContent: 'center',
+    width: 30,
+  },
+  zoomResetButton: {
+    borderColor: 'rgba(138, 160, 255, 0.2)',
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    width: 34,
+  },
+  zoomGlyph: {
+    color: '#F7F8FF',
+    fontSize: 17,
+    fontWeight: '500',
+    lineHeight: 20,
+  },
+  zoomResetText: {
+    color: '#8AA0FF',
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.4,
   },
 });

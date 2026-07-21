@@ -63,6 +63,44 @@ CHECKPOINT → Commit message:
 
 ---
 
+## Step 01.3 — Restore compact topology and extend visual continuity
+
+PROMPT → Apply the Pilot's corrective reference for the compact Diamond, add
+mobile zoom, and carry each face's Stack Glow material into the harmony
+sequence without changing chord identities, audio scheduling, or rhythm.
+
+Implementation requirements:
+
+- Replace the rectangular lattice cut with the approved 1–4–5–5–4–1 vertex
+  rows. Opposite major/minor faces must share the same horizontal base vertices
+  literally, while all 12 major and 12 minor identities remain unique.
+- Project the canonical Tonnetz coordinates without visually rotating away the
+  shared-base relationship; notes remain exactly on shared vertices.
+- Scale the complete visual, label, note, and hit-target layer together from
+  `1×` through `2×`. Expose touch-accessible zoom controls and two-finger pinch;
+  reset must return to the original fit.
+- Draw sequence badges from `resolveFluidTonnetzMaterial`, so tonal-function and
+  out-of-scale gradients match the originating face. The active badge receives
+  the radiant sweep plus synchronized within-chord progress, and the next badge
+  remains explicit.
+- Use one lazily initialized Skia Canvas for the complete sequence strip rather
+  than one Canvas per badge; add no dependency.
+
+Validation:
+
+- `pnpm test`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm build:web`
+- Browser 390×844: verify the chord/vertex ordering against the Pilot reference,
+  zoom then select an in-scale and out-of-scale face, and run Play/Stop while
+  observing the badge playhead.
+
+CHECKPOINT → Commit message:
+`fix(fluid-tonnetz): Phase 01 step 01.3 — restore compact Diamond continuity`
+
+---
+
 ## Phase Acceptance
 
 - **A-01-01** — The enabled Harmony surface still exposes exactly 24 unique major/minor chord faces and 20 fixed shared note nodes, and every canonical face remains directly selectable.
@@ -83,6 +121,17 @@ CHECKPOINT → Commit message:
   - Validation method: `operability`
 - **A-01-09** — Tests, lint, typecheck, formatting, and the production web export complete successfully.
   - Validation method: `operability`
+- **A-01-10** — The visible lattice uses exactly 1–4–5–5–4–1 vertex rows, with
+  opposite major/minor faces sharing horizontal bases and all 24 chord
+  identities present once.
+  - Validation method: `integration`
+- **A-01-11** — Zoom scales the complete Diamond and its hit targets from 1× to
+  2× without changing which chord a tap selects.
+  - Validation method: `integration`
+- **A-01-12** — Every progression badge reuses the corresponding face's Stack
+  Glow material; the playing badge shows a radiant border and synchronized
+  progress while the next badge remains explicit.
+  - Validation method: `integration`
 
 ## Operability requirements
 

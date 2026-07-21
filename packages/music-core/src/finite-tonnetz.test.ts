@@ -78,9 +78,32 @@ describe('finite Diamond Tonnetz', () => {
     expect(visited.size).toBe(24);
     expect(pitchByVertex.size).toBe(20);
     expect([...pitchByVertex.values()].every((pitches) => pitches.size === 1)).toBe(true);
-    expect(faces.map((face) => face.id)).toContain('3:-1:min');
-    expect(faces.map((face) => face.id)).toContain('0:3:maj');
-    expect(faces.map((face) => face.id)).not.toContain('0:0:maj');
-    expect(faces.map((face) => face.id)).not.toContain('3:2:min');
+    expect(faces.map((face) => face.id)).toContain('0:0:maj');
+    expect(faces.map((face) => face.id)).toContain('3:-4:min');
+    expect(faces.map((face) => face.id)).not.toContain('3:-1:min');
+    expect(faces.map((face) => face.id)).not.toContain('0:-3:maj');
+  });
+
+  it('uses the approved 1–4–5–5–4–1 compact Diamond vertex rows', () => {
+    const vertices = new Map<string, { i: number; j: number; pitchClass: number }>();
+    for (const face of createFiniteTonnetz()) {
+      for (const item of face.vertices) vertices.set(`${item.i}:${item.j}`, item);
+    }
+
+    const rows = [1, 0, -1, -2, -3, -4].map((j) =>
+      [...vertices.values()]
+        .filter((item) => item.j === j)
+        .sort((left, right) => left.i - right.i)
+        .map((item) => item.pitchClass),
+    );
+
+    expect(rows).toEqual([
+      [4],
+      [0, 7, 2, 9],
+      [8, 3, 10, 5, 0],
+      [4, 11, 6, 1, 8],
+      [7, 2, 9, 4],
+      [0],
+    ]);
   });
 });

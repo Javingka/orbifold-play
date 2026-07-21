@@ -5,7 +5,6 @@ import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-na
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SkiaReady } from '@/components/async-skia';
-import { HarmonySequence } from '@/components/harmony-sequence';
 import { MorphLoader } from '@/components/morph-loader';
 import { ParallaxCarousel } from '@/components/parallax-carousel';
 import { ScaleBlurCarousel, type ScaleCarouselOption } from '@/components/scale-blur-carousel';
@@ -29,6 +28,10 @@ import {
 const TonnetzArtifact = React.lazy(async () => {
   const module = await import('@/components/tonnetz-artifact');
   return { default: module.TonnetzArtifact };
+});
+const HarmonySequence = React.lazy(async () => {
+  const module = await import('@/components/harmony-sequence');
+  return { default: module.HarmonySequence };
 });
 const GooeyViewSwitch = React.lazy(async () => {
   const module = await import('@/components/gooey-view-switch');
@@ -371,14 +374,18 @@ export default function Page() {
                         <Text style={styles.readoutHint}>TAP TRIANGLES · SWIPE FOR RHYTHM →</Text>
                       </View>
                       <ViewModeIndicator active="harmony" />
-                      <HarmonySequence
-                        getCycle={getStrudelCycle}
-                        isPlaying={transport === 'playing' && harmonyIncluded}
-                        labelFor={chordLabel}
-                        onClear={handleClearSequence}
-                        onRemove={handleRemoveChord}
-                        sequence={sequence}
-                      />
+                      <SkiaReady>
+                        <HarmonySequence
+                          getCycle={getStrudelCycle}
+                          isPlaying={transport === 'playing' && harmonyIncluded}
+                          labelFor={chordLabel}
+                          onClear={handleClearSequence}
+                          onRemove={handleRemoveChord}
+                          scaleMode={selectedScale.mode}
+                          scaleRootPc={selectedScale.rootPc}
+                          sequence={sequence}
+                        />
+                      </SkiaReady>
                     </View>
                   ),
                 },
