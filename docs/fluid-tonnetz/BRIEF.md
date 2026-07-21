@@ -1,6 +1,6 @@
 # Fluid Tonnetz — Experience Brief
 
-Status: interaction model approved; color/material exploration
+Status: Stack Glow production direction approved
 
 Date: 2026-07-21
 
@@ -78,6 +78,14 @@ Use **Laguna as the resting material** and one controlled event from
 This preserves calm between gestures while making every touch feel physical and
 connected.
 
+## Selected-face invariant
+
+Scale membership controls only the resting material. Every selected face,
+including an out-of-scale face, becomes fully visible and receives a persistent
+animated radiant border inspired by ReactICX Radiant Button: a moving luminous
+band plus a restrained breathing glow. Reduced-motion mode retains the same
+selection hierarchy through a static radiant border.
+
 ## Style studies
 
 All three studies use the production screen base `#050609`, retain the current
@@ -148,9 +156,9 @@ real alpha rather than opaque gray.
 - ReactICX Glow: animated outline as a state signal rather than a permanent
   decoration.
 
-## Decision gate
+## Production decision
 
-Before production implementation, approve one material direction: Stack Glow,
-Night Prism, or Functional Opal. Interaction is already resolved as Laguna at
-rest, first-ring geometry response, second-ring light response, and a selected
-face that remains slightly raised.
+The Pilot approved Stack Glow for production on 2026-07-21, together with
+Laguna at rest, first-ring geometry response, second-ring light response, and a
+selected face that remains slightly raised and radiant regardless of scale
+membership.
