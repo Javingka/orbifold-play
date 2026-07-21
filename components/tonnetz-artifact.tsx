@@ -13,6 +13,7 @@ import {
 import {
   createFiniteTonnetz,
   type FiniteTonnetzFace,
+  type TonnetzVertex,
 } from '@/packages/music-core/src/finite-tonnetz';
 import {
   resolveDiatonicFaceRole,
@@ -29,11 +30,20 @@ interface RenderFace {
   face: FiniteTonnetzFace;
   points: readonly [Point, Point, Point];
   center: Point;
-  notePoints: readonly [Point, Point, Point];
-  notePitchClasses: readonly [number, number, number];
   cellSize: number;
   hitStyle: ViewStyle & { clipPath: string };
   path: ReturnType<typeof Skia.Path.Make>;
+}
+
+interface RenderNode {
+  key: string;
+  pitchClass: number;
+  point: Point;
+}
+
+interface RenderGeometry {
+  faces: readonly RenderFace[];
+  nodes: readonly RenderNode[];
 }
 
 interface TonnetzArtifactProps {
@@ -44,18 +54,7 @@ interface TonnetzArtifactProps {
 }
 
 const FACES = createFiniteTonnetz();
-const MAJOR_FACES = FACES.filter((face) => face.quality === 'maj').sort(
-  (a, b) => a.rootPc - b.rootPc,
-);
-const MINOR_FACES = FACES.filter((face) => face.quality === 'min').sort(
-  (a, b) => a.rootPc - b.rootPc,
-);
-const HEX_ROWS = [
-  { count: 5, startsMajor: true },
-  { count: 7, startsMajor: true },
-  { count: 7, startsMajor: false },
-  { count: 5, startsMajor: false },
-] as const;
+const ROW_HEIGHT_RATIO = Math.sqrt(3) / 2;
 const FUNCTION_COLORS: Record<TonalFunction, string> = {
   tonic: '#f3b15a',
   subdominant: '#56cfc4',
@@ -90,90 +89,94 @@ function chordLabel(face: FiniteTonnetzFace): string {
   return `${NOTE_NAMES[face.rootPc]}${face.quality === 'min' ? 'm' : ''}`;
 }
 
-function moveToward(point: Point, target: Point, amount: number): Point {
+function vertexKey(vertex: Pick<TonnetzVertex, 'i' | 'j'>): string {
+  return `${vertex.i}:${vertex.j}`;
+}
+
+function projectVertex(vertex: Pick<TonnetzVertex, 'i' | 'j'>): Point {
+  // The 60° lattice rotation keeps equilateral faces pointing up/down while
+  // giving the Diamond a wider, more legible footprint on a short phone stage.
   return {
-    x: point.x + (target.x - point.x) * amount,
-    y: point.y + (target.y - point.y) * amount,
+    x: vertex.i * 0.5 + vertex.j,
+    y: vertex.i * ROW_HEIGHT_RATIO,
   };
 }
 
-function makeRenderFaces(width: number, height: number): readonly RenderFace[] {
+const PROJECTED_VERTICES = FACES.flatMap((face) => face.vertices.map(projectVertex));
+const DIAMOND_BOUNDS = {
+  minX: Math.min(...PROJECTED_VERTICES.map((point) => point.x)),
+  maxX: Math.max(...PROJECTED_VERTICES.map((point) => point.x)),
+  minY: Math.min(...PROJECTED_VERTICES.map((point) => point.y)),
+  maxY: Math.max(...PROJECTED_VERTICES.map((point) => point.y)),
+};
+
+function makeRenderGeometry(width: number, height: number): RenderGeometry {
   const padding = 12;
-  if (width <= padding * 2 || height <= padding * 2) return [];
+  if (width <= padding * 2 || height <= padding * 2) return { faces: [], nodes: [] };
 
-  const cell = Math.min((width - padding * 2) / 4, (height - padding * 2) / (4 * 0.866));
-  const rowHeight = cell * 0.866;
-  const shapeWidth = cell * 4;
-  const shapeHeight = rowHeight * 4;
-  const originX = (width - shapeWidth) / 2;
-  const originY = (height - shapeHeight) / 2;
+  const diamondWidth = DIAMOND_BOUNDS.maxX - DIAMOND_BOUNDS.minX;
+  const diamondHeight = DIAMOND_BOUNDS.maxY - DIAMOND_BOUNDS.minY;
+  const cell = Math.min(
+    (width - padding * 2) / diamondWidth,
+    (height - padding * 2) / diamondHeight,
+  );
+  const originX = (width - diamondWidth * cell) / 2;
+  const originY = (height - diamondHeight * cell) / 2;
+  const mapVertex = (vertex: TonnetzVertex): Point => {
+    const projected = projectVertex(vertex);
+    return {
+      x: originX + (projected.x - DIAMOND_BOUNDS.minX) * cell,
+      y: originY + (projected.y - DIAMOND_BOUNDS.minY) * cell,
+    };
+  };
   const renderFaces: RenderFace[] = [];
-  let majorIndex = 0;
-  let minorIndex = 0;
+  const renderNodes = new Map<string, RenderNode>();
 
-  HEX_ROWS.forEach((row, rowIndex) => {
-    const rowWidth = ((row.count + 1) / 2) * cell;
-    const rowX = originX + (shapeWidth - rowWidth) / 2;
-    const top = originY + rowIndex * rowHeight;
+  for (const face of FACES) {
+    const points: readonly [Point, Point, Point] = [
+      mapVertex(face.vertices[0]),
+      mapVertex(face.vertices[1]),
+      mapVertex(face.vertices[2]),
+    ];
+    const path = Skia.Path.Make();
+    path.moveTo(points[0].x, points[0].y);
+    path.lineTo(points[1].x, points[1].y);
+    path.lineTo(points[2].x, points[2].y);
+    path.close();
+    const center = {
+      x: (points[0].x + points[1].x + points[2].x) / 3,
+      y: (points[0].y + points[1].y + points[2].y) / 3,
+    };
+    const left = Math.min(...points.map((point) => point.x));
+    const right = Math.max(...points.map((point) => point.x));
+    const top = Math.min(...points.map((point) => point.y));
+    const bottom = Math.max(...points.map((point) => point.y));
+    const hitWidth = right - left;
+    const hitHeight = bottom - top;
+    const clipPath = `polygon(${points
+      .map(
+        (point) =>
+          `${(((point.x - left) / hitWidth) * 100).toFixed(2)}% ${(((point.y - top) / hitHeight) * 100).toFixed(2)}%`,
+      )
+      .join(', ')})`;
 
-    for (let column = 0; column < row.count; column += 1) {
-      const isMajor = column % 2 === 0 ? row.startsMajor : !row.startsMajor;
-      const face = isMajor
-        ? (MAJOR_FACES[majorIndex++] as FiniteTonnetzFace)
-        : (MINOR_FACES[minorIndex++] as FiniteTonnetzFace);
-      const left = rowX + column * cell * 0.5;
-      const points: readonly [Point, Point, Point] = isMajor
-        ? [
-            { x: left + cell * 0.5, y: top },
-            { x: left + cell, y: top + rowHeight },
-            { x: left, y: top + rowHeight },
-          ]
-        : [
-            { x: left, y: top },
-            { x: left + cell, y: top },
-            { x: left + cell * 0.5, y: top + rowHeight },
-          ];
-      const path = Skia.Path.Make();
-      path.moveTo(points[0].x, points[0].y);
-      path.lineTo(points[1].x, points[1].y);
-      path.lineTo(points[2].x, points[2].y);
-      path.close();
-      const center = {
-        x: (points[0].x + points[1].x + points[2].x) / 3,
-        y: (points[0].y + points[1].y + points[2].y) / 3,
-      };
-      const notePoints: readonly [Point, Point, Point] = [
-        moveToward(points[0], center, 0.38),
-        moveToward(points[1], center, 0.38),
-        moveToward(points[2], center, 0.38),
-      ];
-      const [root, third, fifth] = face.pitchClasses;
-      const notePitchClasses: readonly [number, number, number] = isMajor
-        ? [third, fifth, root]
-        : [root, fifth, third];
-      const hitStyle: ViewStyle & { clipPath: string } = {
-        left,
-        top,
-        width: cell,
-        height: rowHeight,
-        clipPath: isMajor
-          ? 'polygon(50% 0%, 100% 100%, 0% 100%)'
-          : 'polygon(0% 0%, 100% 0%, 50% 100%)',
-      };
-      renderFaces.push({
-        face,
-        points,
-        center,
-        notePoints,
-        notePitchClasses,
-        cellSize: cell,
-        hitStyle,
-        path,
-      });
-    }
-  });
+    renderFaces.push({
+      face,
+      points,
+      center,
+      cellSize: cell,
+      hitStyle: { left, top, width: hitWidth, height: hitHeight, clipPath },
+      path,
+    });
 
-  return renderFaces;
+    face.vertices.forEach((vertex) => {
+      const key = vertexKey(vertex);
+      if (renderNodes.has(key)) return;
+      renderNodes.set(key, { key, pitchClass: vertex.pitchClass, point: mapVertex(vertex) });
+    });
+  }
+
+  return { faces: renderFaces, nodes: [...renderNodes.values()] };
 }
 
 export function TonnetzArtifact({
@@ -183,9 +186,17 @@ export function TonnetzArtifact({
   onSelect,
 }: TonnetzArtifactProps) {
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const renderFaces = useMemo(
-    () => makeRenderFaces(size.width, size.height),
+  const renderGeometry = useMemo(
+    () => makeRenderGeometry(size.width, size.height),
     [size.height, size.width],
+  );
+  const selectedVertexKeys = useMemo(
+    () =>
+      new Set(
+        FACES.find((face) => face.id === selectedId)?.vertices.map((vertex) => vertexKey(vertex)) ??
+          [],
+      ),
+    [selectedId],
   );
 
   const handleLayout = (event: LayoutChangeEvent): void => {
@@ -203,7 +214,7 @@ export function TonnetzArtifact({
           />
         </Rect>
         <Group>
-          {renderFaces.map(({ face, path }) => {
+          {renderGeometry.faces.map(({ face, path }) => {
             const selected = face.id === selectedId;
             const { base, inScale, isTonic } = resolveFaceAppearance(face, scaleRootPc, scaleMode);
             return (
@@ -229,69 +240,68 @@ export function TonnetzArtifact({
         </Group>
       </Canvas>
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        {renderFaces.map(({ center, cellSize, face, notePitchClasses, notePoints }) => {
+        {renderGeometry.faces.map(({ center, cellSize, face }) => {
           const selected = face.id === selectedId;
           const { base, inScale } = resolveFaceAppearance(face, scaleRootPc, scaleMode);
-          const noteSize = Math.max(15, Math.min(19, cellSize * 0.2));
-          const chordFontSize = Math.max(14, Math.min(19, cellSize * 0.2));
+          const chordFontSize = Math.max(12, Math.min(18, cellSize * 0.23));
           const chordLineHeight = chordFontSize * 1.08;
 
           return (
-            <View key={`${face.id}:labels`} style={StyleSheet.absoluteFill}>
+            <Text
+              key={`${face.id}:label`}
+              numberOfLines={1}
+              style={[
+                styles.chordLabel,
+                {
+                  color: selected ? '#fff4dc' : base,
+                  fontSize: chordFontSize,
+                  lineHeight: chordLineHeight,
+                  left: center.x - cellSize * 0.36,
+                  opacity: selected ? 1 : inScale ? 0.96 : 0.58,
+                  top: center.y - chordLineHeight / 2,
+                  width: cellSize * 0.72,
+                },
+              ]}
+            >
+              {chordLabel(face)}
+            </Text>
+          );
+        })}
+        {renderGeometry.nodes.map(({ key, pitchClass, point }) => {
+          const selected = selectedVertexKeys.has(key);
+          const nodeSize = Math.max(
+            15,
+            Math.min(20, (renderGeometry.faces[0]?.cellSize ?? 0) * 0.28),
+          );
+          return (
+            <View
+              key={key}
+              style={[
+                styles.noteBadge,
+                {
+                  borderColor: selected ? '#f3b15a' : 'rgba(255, 255, 255, 0.82)',
+                  borderRadius: nodeSize / 2,
+                  borderWidth: selected ? 2 : 1,
+                  height: nodeSize,
+                  left: point.x - nodeSize / 2,
+                  opacity: selected ? 1 : 0.94,
+                  top: point.y - nodeSize / 2,
+                  width: nodeSize,
+                },
+              ]}
+            >
               <Text
                 numberOfLines={1}
-                style={[
-                  styles.chordLabel,
-                  {
-                    color: selected ? '#fff4dc' : base,
-                    fontSize: chordFontSize,
-                    lineHeight: chordLineHeight,
-                    left: center.x - cellSize * 0.31,
-                    opacity: selected ? 1 : inScale ? 0.96 : 0.58,
-                    top: center.y - chordLineHeight / 2,
-                    width: cellSize * 0.62,
-                  },
-                ]}
+                style={[styles.noteLabel, { fontSize: nodeSize * 0.48, lineHeight: nodeSize }]}
               >
-                {chordLabel(face)}
+                {NOTE_NAMES[pitchClass]}
               </Text>
-              {selected || inScale
-                ? notePoints.map((point, noteIndex) => (
-                    <View
-                      key={`${face.id}:note:${noteIndex}`}
-                      style={[
-                        styles.noteBadge,
-                        {
-                          borderRadius: noteSize / 2,
-                          height: noteSize,
-                          left: point.x - noteSize / 2,
-                          opacity: selected ? 1 : 0.94,
-                          top: point.y - noteSize / 2,
-                          width: noteSize,
-                        },
-                      ]}
-                    >
-                      <Text
-                        numberOfLines={1}
-                        style={[
-                          styles.noteLabel,
-                          {
-                            fontSize: noteSize * 0.49,
-                            lineHeight: noteSize,
-                          },
-                        ]}
-                      >
-                        {NOTE_NAMES[notePitchClasses[noteIndex] as number]}
-                      </Text>
-                    </View>
-                  ))
-                : null}
             </View>
           );
         })}
       </View>
       <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-        {renderFaces.map(({ face, hitStyle }) => (
+        {renderGeometry.faces.map(({ face, hitStyle }) => (
           <Pressable
             key={face.id}
             accessibilityLabel={`Play chord ${chordLabel(face)}, notes ${face.pitchClasses

@@ -27,7 +27,8 @@ opening a settings panel or reading instructions.
 
 ### 01.3 Harmony interaction
 
-- Render the 24-face artifact as a responsive 5–7–7–5 Hexagon Tonnetz.
+- Render the 24-face artifact as a responsive, centrally symmetric Diamond
+  Tonnetz whose adjacent faces reference the same note vertices.
 - Adapt ReactICX Blur Carousel as a compact scale selector and color the finite
   faces with the original tonic/subdominant/dominant classification.
 - Tap faces to append chords to an ordered, removable progression.

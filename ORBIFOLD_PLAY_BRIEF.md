@@ -22,8 +22,9 @@ shape or a rhythm orbit, and immediately make something musical.
 
 - A finite Tonnetz artifact containing exactly 24 triangular faces: the 12 major
   and 12 minor pitch-class triads, each represented once.
-- The artifact is a deliberate 5–7–7–5 Hexagon Tonnetz silhouette, not an
-  infinite Tonnetz wallpaper.
+- The artifact is a deliberate, centrally symmetric Diamond Tonnetz silhouette,
+  preserving shared note vertices across all adjacent faces rather than acting
+  as an infinite Tonnetz wallpaper.
 - A compact ReactICX-style Blur Carousel selects a C-rooted mode; diatonic faces
   receive tonic, subdominant, and dominant colors while every chord stays playable.
 - Tap appends a chord to a visible progression. The unified transport plays the
