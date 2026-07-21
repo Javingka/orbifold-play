@@ -1,6 +1,6 @@
 # Phase 01 — Fluid Diamond Prototype
 
-Status: proposed; awaiting interaction-direction approval
+Status: proposed; interaction approved, awaiting color/material approval
 
 ## Outcome
 
@@ -15,6 +15,7 @@ dynamic color, without changing musical identity or audio behavior.
 - Propagate touch response through the finite Tonnetz adjacency graph.
 - Add deterministic per-face gradient palettes derived from tonal function,
   root, and quality.
+- Render out-of-scale faces with a bounded alpha channel rather than opaque gray.
 - Preserve fixed shared note nodes above the moving tile layer.
 - Provide reduced-motion and non-runtime-shader fallbacks.
 - Measure animation smoothness at 320×568 and 390×844.
@@ -35,10 +36,13 @@ dynamic color, without changing musical identity or audio behavior.
   moves as strongly.
 - Every note circle remains exactly on its canonical shared vertex.
 - In-scale and out-of-scale faces remain distinguishable without reading labels.
+- Out-of-scale alpha remains between 6% and 15%, with chord labels still
+  readable against the `#050609` screen background.
 - Twenty-four independent shaders are not required for the first implementation.
 - Tests, lint, typecheck, formatting, and web export remain clean.
 
 ## Pilot checkpoint
 
-Approve the motion/material direction from `docs/fluid-tonnetz/BRIEF.md` before
-production component work begins.
+Approve one of the three material studies in `docs/fluid-tonnetz/BRIEF.md` before
+production component work begins. The Laguna + Resonance motion model is already
+approved.

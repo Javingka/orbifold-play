@@ -1,6 +1,6 @@
 # Fluid Tonnetz — Experience Brief
 
-Status: interaction exploration
+Status: interaction model approved; color/material exploration
 
 Date: 2026-07-21
 
@@ -62,10 +62,10 @@ anchors remain exact.
 - Most spectacular still image and demo behavior, but continuous motion risks
   weakening note alignment and competing with the harmony playhead.
 
-## Recommended synthesis
+## Approved interaction synthesis
 
-Use **Laguna as the resting material** and borrow one controlled event from
-**Resonance**:
+Use **Laguna as the resting material** and one controlled event from
+**Resonance**. The Pilot approved this direction on 2026-07-21:
 
 - press-in: selected face sinks over 90 ms;
 - impact: three shared-edge neighbors counter-bob after 35 ms;
@@ -78,15 +78,45 @@ Use **Laguna as the resting material** and borrow one controlled event from
 This preserves calm between gestures while making every touch feel physical and
 connected.
 
+## Style studies
+
+All three studies use the production screen base `#050609`, retain the current
+tonic/subdominant/dominant identities, and render out-of-scale faces through
+real alpha rather than opaque gray.
+
+### 1. Stack Glow — recommended
+
+- Adapts the saturated two-color gradient language from ReactICX Stacked Cards.
+- Tonic moves through coral, orange, and soft gold.
+- Subdominant moves through aqua, teal, and mint.
+- Dominant moves through orchid, pink, and rose.
+- Out-of-scale faces use indigo/violet material at 10% alpha.
+- Best balance of color pleasure, immediate scale recognition, and contrast on
+  the Orbifold background.
+
+### 2. Night Prism
+
+- Uses hotter warm gradients and electric cyan/blue/violet contrasts.
+- Out-of-scale faces drop to 6.5% alpha.
+- Most energetic and game-like direction, but it competes more strongly with
+  the selected chord and harmony playhead.
+
+### 3. Functional Opal
+
+- Preserves Orbifold's existing functional colors inside pale opalescent ramps.
+- Out-of-scale faces remain more present at 14% alpha.
+- Most coherent with the current product palette and most legible, but less
+  disruptive than Stack Glow.
+
 ## Material and color grammar
 
-- Each face receives a deterministic four-stop palette derived from chord root,
+- Each face receives a deterministic three-stop palette derived from chord root,
   quality, and tonal function, so adjacent tiles do not look cloned.
-- Tonic faces center on `#f3b15a`, subdominant on `#56cfc4`, dominant on
-  `#e87bac`, and non-diatonic/accent faces on desaturated `#8aa0ff` families.
+- The approved production palette will keep tonic warm, subdominant aqua/teal,
+  dominant orchid/pink, and non-diatonic faces in indigo/violet families.
 - In-scale tiles use higher contrast and slow internal gradient movement.
-- Out-of-scale tiles retain a visible chord label but use low-contrast, nearly
-  static gradients.
+- Out-of-scale tiles retain a visible chord label but use 6.5–14% material alpha
+  and nearly static gradients.
 - The selected tile increases saturation and edge light rather than becoming a
   flat unrelated color.
 
@@ -107,6 +137,8 @@ connected.
 
 ## Reference extraction
 
+- ReactICX Stacked Cards: saturated two-color gradients over a near-black
+  background, softened by translucent surfaces and controlled blur.
 - ReactICX Cinematic Carousel: item separation through perspective, scale,
   opacity, rotation, translation, and focus-dependent blur.
 - ReactICX Mesh Gradient: Skia runtime shader driven by shared time, resolution,
@@ -118,9 +150,7 @@ connected.
 
 ## Decision gate
 
-Before production implementation, approve:
-
-1. resting direction: Laguna, Resonance, or Archipelago;
-2. propagation: edge neighbors only or two graph rings;
-3. gradient energy: subtle, expressive, or dramatic;
-4. whether the selected face stays raised or slightly submerged after release.
+Before production implementation, approve one material direction: Stack Glow,
+Night Prism, or Functional Opal. Interaction is already resolved as Laguna at
+rest, first-ring geometry response, second-ring light response, and a selected
+face that remains slightly raised.
