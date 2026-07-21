@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { Canvas, Group, Path, Rect, Skia, SweepGradient, vec } from '@shopify/react-native-skia';
 import { useMemo, useState } from 'react';
-import { type LayoutChangeEvent, Pressable, StyleSheet, type ViewStyle, View } from 'react-native';
+import {
+  type LayoutChangeEvent,
+  Pressable,
+  StyleSheet,
+  Text,
+  type ViewStyle,
+  View,
+} from 'react-native';
 
 import {
   createFiniteTonnetz,
@@ -22,6 +29,9 @@ interface RenderFace {
   face: FiniteTonnetzFace;
   points: readonly [Point, Point, Point];
   center: Point;
+  notePoints: readonly [Point, Point, Point];
+  notePitchClasses: readonly [number, number, number];
+  cellSize: number;
   hitStyle: ViewStyle & { clipPath: string };
   path: ReturnType<typeof Skia.Path.Make>;
 }
@@ -51,6 +61,41 @@ const FUNCTION_COLORS: Record<TonalFunction, string> = {
   subdominant: '#56cfc4',
   dominant: '#e87bac',
 };
+const NOTE_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'] as const;
+
+interface FaceAppearance {
+  base: string;
+  inScale: boolean;
+  isTonic: boolean;
+}
+
+function resolveFaceAppearance(
+  face: FiniteTonnetzFace,
+  scaleRootPc: number,
+  scaleMode: ScaleMode,
+): FaceAppearance {
+  const role = resolveDiatonicFaceRole(face, scaleRootPc, scaleMode);
+  return {
+    base: role
+      ? FUNCTION_COLORS[role.tonalFunction]
+      : face.quality === 'maj'
+        ? '#8aa0ff'
+        : '#56cfc4',
+    inScale: role !== null,
+    isTonic: role?.degree === 0,
+  };
+}
+
+function chordLabel(face: FiniteTonnetzFace): string {
+  return `${NOTE_NAMES[face.rootPc]}${face.quality === 'min' ? 'm' : ''}`;
+}
+
+function moveToward(point: Point, target: Point, amount: number): Point {
+  return {
+    x: point.x + (target.x - point.x) * amount,
+    y: point.y + (target.y - point.y) * amount,
+  };
+}
 
 function makeRenderFaces(width: number, height: number): readonly RenderFace[] {
   const padding = 12;
@@ -97,6 +142,15 @@ function makeRenderFaces(width: number, height: number): readonly RenderFace[] {
         x: (points[0].x + points[1].x + points[2].x) / 3,
         y: (points[0].y + points[1].y + points[2].y) / 3,
       };
+      const notePoints: readonly [Point, Point, Point] = [
+        moveToward(points[0], center, 0.38),
+        moveToward(points[1], center, 0.38),
+        moveToward(points[2], center, 0.38),
+      ];
+      const [root, third, fifth] = face.pitchClasses;
+      const notePitchClasses: readonly [number, number, number] = isMajor
+        ? [third, fifth, root]
+        : [root, fifth, third];
       const hitStyle: ViewStyle & { clipPath: string } = {
         left,
         top,
@@ -106,7 +160,16 @@ function makeRenderFaces(width: number, height: number): readonly RenderFace[] {
           ? 'polygon(50% 0%, 100% 100%, 0% 100%)'
           : 'polygon(0% 0%, 100% 0%, 50% 100%)',
       };
-      renderFaces.push({ face, points, center, hitStyle, path });
+      renderFaces.push({
+        face,
+        points,
+        center,
+        notePoints,
+        notePitchClasses,
+        cellSize: cell,
+        hitStyle,
+        path,
+      });
     }
   });
 
@@ -142,14 +205,7 @@ export function TonnetzArtifact({
         <Group>
           {renderFaces.map(({ face, path }) => {
             const selected = face.id === selectedId;
-            const role = resolveDiatonicFaceRole(face, scaleRootPc, scaleMode);
-            const inScale = role !== null;
-            const base = role
-              ? FUNCTION_COLORS[role.tonalFunction]
-              : face.quality === 'maj'
-                ? '#8aa0ff'
-                : '#56cfc4';
-            const isTonic = role?.degree === 0;
+            const { base, inScale, isTonic } = resolveFaceAppearance(face, scaleRootPc, scaleMode);
             return (
               <Group key={face.id}>
                 {selected || isTonic ? (
@@ -172,11 +228,75 @@ export function TonnetzArtifact({
           })}
         </Group>
       </Canvas>
+      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+        {renderFaces.map(({ center, cellSize, face, notePitchClasses, notePoints }) => {
+          const selected = face.id === selectedId;
+          const { base, inScale } = resolveFaceAppearance(face, scaleRootPc, scaleMode);
+          const noteSize = Math.max(15, Math.min(19, cellSize * 0.2));
+          const chordFontSize = Math.max(14, Math.min(19, cellSize * 0.2));
+          const chordLineHeight = chordFontSize * 1.08;
+
+          return (
+            <View key={`${face.id}:labels`} style={StyleSheet.absoluteFill}>
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.chordLabel,
+                  {
+                    color: selected ? '#fff4dc' : base,
+                    fontSize: chordFontSize,
+                    lineHeight: chordLineHeight,
+                    left: center.x - cellSize * 0.31,
+                    opacity: selected ? 1 : inScale ? 0.96 : 0.58,
+                    top: center.y - chordLineHeight / 2,
+                    width: cellSize * 0.62,
+                  },
+                ]}
+              >
+                {chordLabel(face)}
+              </Text>
+              {selected || inScale
+                ? notePoints.map((point, noteIndex) => (
+                    <View
+                      key={`${face.id}:note:${noteIndex}`}
+                      style={[
+                        styles.noteBadge,
+                        {
+                          borderRadius: noteSize / 2,
+                          height: noteSize,
+                          left: point.x - noteSize / 2,
+                          opacity: selected ? 1 : 0.94,
+                          top: point.y - noteSize / 2,
+                          width: noteSize,
+                        },
+                      ]}
+                    >
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          styles.noteLabel,
+                          {
+                            fontSize: noteSize * 0.49,
+                            lineHeight: noteSize,
+                          },
+                        ]}
+                      >
+                        {NOTE_NAMES[notePitchClasses[noteIndex] as number]}
+                      </Text>
+                    </View>
+                  ))
+                : null}
+            </View>
+          );
+        })}
+      </View>
       <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
         {renderFaces.map(({ face, hitStyle }) => (
           <Pressable
             key={face.id}
-            accessibilityLabel={`Play chord ${face.rootPc} ${face.quality}`}
+            accessibilityLabel={`Play chord ${chordLabel(face)}, notes ${face.pitchClasses
+              .map((pitchClass) => NOTE_NAMES[pitchClass])
+              .join(', ')}`}
             accessibilityRole="button"
             onPress={() => onSelect(face)}
             style={[styles.faceTarget, hitStyle]}
@@ -194,5 +314,32 @@ const styles = StyleSheet.create({
   },
   faceTarget: {
     position: 'absolute',
+  },
+  chordLabel: {
+    fontWeight: '800',
+    letterSpacing: -0.35,
+    position: 'absolute',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.88)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  noteBadge: {
+    alignItems: 'center',
+    backgroundColor: '#f7f8fb',
+    borderColor: 'rgba(255, 255, 255, 0.82)',
+    borderWidth: 1,
+    justifyContent: 'center',
+    position: 'absolute',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.48,
+    shadowRadius: 3,
+  },
+  noteLabel: {
+    color: '#22242a',
+    fontWeight: '800',
+    letterSpacing: -0.45,
+    textAlign: 'center',
   },
 });
