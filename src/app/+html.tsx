@@ -54,7 +54,7 @@ export default function Root({ children }: PropsWithChildren) {
           content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
         />
         <meta name="theme-color" content="#050609" />
-        <link rel="manifest" href="/manifest.json" />
+        <link rel="manifest" href="manifest.json" />
         <style dangerouslySetInnerHTML={{ __html: BOOT_STYLES }} />
         <ScrollViewStyleReset />
       </head>
