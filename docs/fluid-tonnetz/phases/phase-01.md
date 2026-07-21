@@ -1,5 +1,7 @@
 # Phase 01 — Stack Glow Fluid Diamond
 
+Status: complete on `fluid-tonnetz/phase-01`
+
 **Purpose:** Ship the approved Stack Glow Diamond Tonnetz as a tactile, graph-coupled mobile surface while preserving every musical and interaction contract already in production.
 **Gate:** The Pilot has approved Stack Glow, Laguna at rest, the controlled Resonance touch event, and a Radiant Button-inspired selected border for both in-scale and out-of-scale faces.
 **Expected phase result:** All 24 canonical faces remain directly playable and gain deterministic Stack Glow material, scale-aware resting alpha, universal radiant selection, coupled touch motion, and reduced-motion behavior without changing audio, sequence, topology, notes, or hit testing.
@@ -74,7 +76,7 @@ CHECKPOINT → Commit message:
 - **A-01-05** — Shared note badges remain fixed on canonical vertices, chord labels remain attached to their faces, and canonical hit targets select the same face exactly once despite visual transforms.
   - Validation method: `integration`
 - **A-01-06** — Reduced motion removes displacement and traveling light while preserving full-opacity selection and a static radiant border for every selected face.
-  - Validation method: `manual`
+  - Validation method: `integration`
 - **A-01-07** — The direct replacement preserves the existing one-callback-per-tap selection/audio/sequence behavior; no new package or runtime-shader dependency is required.
   - Validation method: `integration`
 - **A-01-08** — A fresh operator can start the experience, select an out-of-scale chord, hear it through the existing flow, and stop playback at both required mobile viewport sizes.

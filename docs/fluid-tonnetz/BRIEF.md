@@ -1,6 +1,6 @@
 # Fluid Tonnetz — Experience Brief
 
-Status: Stack Glow production direction approved
+Status: Stack Glow implemented and verified on `fluid-tonnetz/phase-01`
 
 Date: 2026-07-21
 

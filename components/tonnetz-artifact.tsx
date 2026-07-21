@@ -1,6 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { Canvas, Group, Path, Rect, Skia, SweepGradient, vec } from '@shopify/react-native-skia';
-import { useMemo, useState } from 'react';
+import {
+  BlurMask,
+  Canvas,
+  Group,
+  LinearGradient,
+  Path,
+  Rect,
+  Skia,
+  SweepGradient,
+  useClock,
+  vec,
+} from '@shopify/react-native-skia';
+import { useEffect, useMemo, useState } from 'react';
 import {
   type LayoutChangeEvent,
   Pressable,
@@ -9,17 +20,31 @@ import {
   type ViewStyle,
   View,
 } from 'react-native';
+import Animated, {
+  cancelAnimation,
+  Easing,
+  type SharedValue,
+  useAnimatedStyle,
+  useDerivedValue,
+  useReducedMotion,
+  useSharedValue,
+  withDelay,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 
 import {
   createFiniteTonnetz,
   type FiniteTonnetzFace,
   type TonnetzVertex,
 } from '@/packages/music-core/src/finite-tonnetz';
+import type { ScaleMode } from '@/packages/music-core/src/scales';
 import {
-  resolveDiatonicFaceRole,
-  type ScaleMode,
-  type TonalFunction,
-} from '@/packages/music-core/src/scales';
+  resolveFluidTonnetzMaterial,
+  resolveFluidTonnetzMotionPolicy,
+  resolveFluidTonnetzRings,
+  type FluidTonnetzMaterial,
+} from '@/packages/ui-core/src/fluid-tonnetz';
 
 interface Point {
   x: number;
@@ -32,7 +57,8 @@ interface RenderFace {
   center: Point;
   cellSize: number;
   hitStyle: ViewStyle & { clipPath: string };
-  path: ReturnType<typeof Skia.Path.Make>;
+  canonicalPath: ReturnType<typeof Skia.Path.Make>;
+  insetPath: ReturnType<typeof Skia.Path.Make>;
 }
 
 interface RenderNode {
@@ -53,37 +79,35 @@ interface TonnetzArtifactProps {
   onSelect: (face: FiniteTonnetzFace) => void;
 }
 
+interface InteractionState {
+  faceId: string | null;
+  token: number;
+}
+
+interface FaceMotionProps {
+  distance: number | undefined;
+  interactionToken: number;
+  labelOpacityTarget: number;
+  materialOpacityTarget: number;
+  reduceMotion: boolean;
+  selected: boolean;
+}
+
+interface FluidFaceProps extends FaceMotionProps {
+  clock: SharedValue<number>;
+  material: FluidTonnetzMaterial;
+  renderFace: RenderFace;
+}
+
+interface FluidLabelProps extends FaceMotionProps {
+  material: FluidTonnetzMaterial;
+  renderFace: RenderFace;
+}
+
 const FACES = createFiniteTonnetz();
 const ROW_HEIGHT_RATIO = Math.sqrt(3) / 2;
-const FUNCTION_COLORS: Record<TonalFunction, string> = {
-  tonic: '#f3b15a',
-  subdominant: '#56cfc4',
-  dominant: '#e87bac',
-};
+const FACE_INSET = 0.1;
 const NOTE_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'] as const;
-
-interface FaceAppearance {
-  base: string;
-  inScale: boolean;
-  isTonic: boolean;
-}
-
-function resolveFaceAppearance(
-  face: FiniteTonnetzFace,
-  scaleRootPc: number,
-  scaleMode: ScaleMode,
-): FaceAppearance {
-  const role = resolveDiatonicFaceRole(face, scaleRootPc, scaleMode);
-  return {
-    base: role
-      ? FUNCTION_COLORS[role.tonalFunction]
-      : face.quality === 'maj'
-        ? '#8aa0ff'
-        : '#56cfc4',
-    inScale: role !== null,
-    isTonic: role?.degree === 0,
-  };
-}
 
 function chordLabel(face: FiniteTonnetzFace): string {
   return `${NOTE_NAMES[face.rootPc]}${face.quality === 'min' ? 'm' : ''}`;
@@ -100,6 +124,23 @@ function projectVertex(vertex: Pick<TonnetzVertex, 'i' | 'j'>): Point {
     x: vertex.i * 0.5 + vertex.j,
     y: vertex.i * ROW_HEIGHT_RATIO,
   };
+}
+
+function makePath(points: readonly Point[]): ReturnType<typeof Skia.Path.Make> {
+  const builder = Skia.PathBuilder.Make();
+  builder.moveTo((points[0] as Point).x, (points[0] as Point).y);
+  for (const point of points.slice(1)) builder.lineTo(point.x, point.y);
+  return builder.close().build();
+}
+
+function insetTriangle(
+  points: readonly [Point, Point, Point],
+  center: Point,
+): readonly [Point, Point, Point] {
+  return points.map((point) => ({
+    x: point.x + (center.x - point.x) * FACE_INSET,
+    y: point.y + (center.y - point.y) * FACE_INSET,
+  })) as unknown as readonly [Point, Point, Point];
 }
 
 const PROJECTED_VERTICES = FACES.flatMap((face) => face.vertices.map(projectVertex));
@@ -138,11 +179,6 @@ function makeRenderGeometry(width: number, height: number): RenderGeometry {
       mapVertex(face.vertices[1]),
       mapVertex(face.vertices[2]),
     ];
-    const path = Skia.Path.Make();
-    path.moveTo(points[0].x, points[0].y);
-    path.lineTo(points[1].x, points[1].y);
-    path.lineTo(points[2].x, points[2].y);
-    path.close();
     const center = {
       x: (points[0].x + points[1].x + points[2].x) / 3,
       y: (points[0].y + points[1].y + points[2].y) / 3,
@@ -166,7 +202,8 @@ function makeRenderGeometry(width: number, height: number): RenderGeometry {
       center,
       cellSize: cell,
       hitStyle: { left, top, width: hitWidth, height: hitHeight, clipPath },
-      path,
+      canonicalPath: makePath(points),
+      insetPath: makePath(insetTriangle(points, center)),
     });
 
     face.vertices.forEach((vertex) => {
@@ -179,6 +216,256 @@ function makeRenderGeometry(width: number, height: number): RenderGeometry {
   return { faces: renderFaces, nodes: [...renderNodes.values()] };
 }
 
+function useFaceMotion({
+  distance,
+  interactionToken,
+  labelOpacityTarget,
+  materialOpacityTarget,
+  reduceMotion,
+  selected,
+}: FaceMotionProps) {
+  const motionPolicy = resolveFluidTonnetzMotionPolicy(reduceMotion, selected);
+  const motionY = useSharedValue(0);
+  const motionScale = useSharedValue(1);
+  const energy = useSharedValue(0);
+  const materialOpacity = useSharedValue(materialOpacityTarget);
+  const labelOpacity = useSharedValue(labelOpacityTarget);
+
+  useEffect(() => {
+    materialOpacity.value = reduceMotion
+      ? materialOpacityTarget
+      : withTiming(materialOpacityTarget, { duration: 240, easing: Easing.out(Easing.cubic) });
+    labelOpacity.value = reduceMotion
+      ? labelOpacityTarget
+      : withTiming(labelOpacityTarget, { duration: 220, easing: Easing.out(Easing.cubic) });
+  }, [labelOpacity, labelOpacityTarget, materialOpacity, materialOpacityTarget, reduceMotion]);
+
+  useEffect(() => {
+    cancelAnimation(motionY);
+    cancelAnimation(motionScale);
+    cancelAnimation(energy);
+    motionY.value = 0;
+    motionScale.value = 1;
+    energy.value = 0;
+    if (!motionPolicy.animateGeometry || interactionToken === 0 || distance === undefined) return;
+
+    if (distance === 0) {
+      motionY.value = withSequence(
+        withTiming(6, { duration: 90, easing: Easing.out(Easing.cubic) }),
+        withTiming(-2.4, { duration: 220, easing: Easing.out(Easing.cubic) }),
+        withTiming(0, { duration: 420, easing: Easing.out(Easing.cubic) }),
+      );
+      motionScale.value = withSequence(
+        withTiming(0.94, { duration: 90, easing: Easing.out(Easing.cubic) }),
+        withTiming(1.03, { duration: 220, easing: Easing.out(Easing.cubic) }),
+        withTiming(1, { duration: 420, easing: Easing.out(Easing.cubic) }),
+      );
+      return;
+    }
+
+    if (distance === 1) {
+      motionY.value = withDelay(
+        35,
+        withSequence(
+          withTiming(-2.8, { duration: 150, easing: Easing.out(Easing.cubic) }),
+          withTiming(0.8, { duration: 210, easing: Easing.out(Easing.cubic) }),
+          withTiming(0, { duration: 330, easing: Easing.out(Easing.cubic) }),
+        ),
+      );
+      motionScale.value = withDelay(
+        35,
+        withSequence(
+          withTiming(1.018, { duration: 150, easing: Easing.out(Easing.cubic) }),
+          withTiming(0.994, { duration: 210, easing: Easing.out(Easing.cubic) }),
+          withTiming(1, { duration: 330, easing: Easing.out(Easing.cubic) }),
+        ),
+      );
+      return;
+    }
+
+    if (distance === 2) {
+      energy.value = withDelay(
+        100,
+        withSequence(
+          withTiming(0.34, { duration: 160, easing: Easing.out(Easing.cubic) }),
+          withTiming(0, { duration: 460, easing: Easing.out(Easing.cubic) }),
+        ),
+      );
+    }
+  }, [distance, energy, interactionToken, motionPolicy.animateGeometry, motionScale, motionY]);
+
+  const transform = useDerivedValue(() => {
+    return [
+      { translateY: motionPolicy.selectedOffset + motionY.value },
+      { scale: motionPolicy.selectedScale * motionScale.value },
+    ];
+  }, [motionPolicy.selectedOffset, motionPolicy.selectedScale]);
+
+  const labelStyle = useAnimatedStyle(() => {
+    return {
+      opacity: labelOpacity.value,
+      transform: [
+        { translateY: motionPolicy.selectedOffset + motionY.value },
+        { scale: motionPolicy.selectedScale * motionScale.value },
+      ],
+    };
+  }, [motionPolicy.selectedOffset, motionPolicy.selectedScale]);
+
+  return { energy, labelStyle, materialOpacity, transform };
+}
+
+function FluidFace({
+  clock,
+  distance,
+  interactionToken,
+  labelOpacityTarget,
+  material,
+  materialOpacityTarget,
+  reduceMotion,
+  renderFace,
+  selected,
+}: FluidFaceProps) {
+  const motionPolicy = resolveFluidTonnetzMotionPolicy(reduceMotion, selected);
+  const { center, cellSize, insetPath } = renderFace;
+  const { energy, materialOpacity, transform } = useFaceMotion({
+    distance,
+    interactionToken,
+    labelOpacityTarget,
+    materialOpacityTarget,
+    reduceMotion,
+    selected,
+  });
+  const radians = (material.gradientAngle * Math.PI) / 180;
+  const gradientRadius = cellSize * 0.58;
+  const gradientStart = vec(
+    center.x - Math.cos(radians) * gradientRadius,
+    center.y - Math.sin(radians) * gradientRadius,
+  );
+  const gradientEnd = vec(
+    center.x + Math.cos(radians) * gradientRadius,
+    center.y + Math.sin(radians) * gradientRadius,
+  );
+  const radiantStart = useDerivedValue(
+    () => (motionPolicy.animateRadiance ? ((clock.value % 3200) / 3200) * 360 : 0),
+    [motionPolicy.animateRadiance],
+  );
+  const radiantEnd = useDerivedValue(() => radiantStart.value + 360);
+  const radiantOpacity = useDerivedValue(
+    () => (motionPolicy.animateRadiance ? 0.68 + Math.sin(clock.value / 620) * 0.14 : 0.84),
+    [motionPolicy.animateRadiance],
+  );
+  const edgeOpacity = selected ? 0.92 : material.inScale ? 0.62 : 0.18;
+
+  return (
+    <Group origin={vec(center.x, center.y)} transform={transform}>
+      <Path path={insetPath} opacity={materialOpacity}>
+        <LinearGradient
+          colors={[...material.colors]}
+          end={gradientEnd}
+          positions={[0, 0.54, 1]}
+          start={gradientStart}
+        />
+      </Path>
+      <Path
+        color={selected ? material.edgeColor : '#DCE3F4'}
+        opacity={edgeOpacity}
+        path={insetPath}
+        strokeWidth={selected ? 1.8 : material.inScale ? 1.05 : 0.65}
+        style="stroke"
+      />
+      <Path color={material.colors[1]} opacity={energy} path={insetPath} />
+      {material.radiant ? (
+        <>
+          <Path opacity={radiantOpacity} path={insetPath} strokeWidth={8} style="stroke">
+            <SweepGradient
+              c={vec(center.x, center.y)}
+              colors={[
+                'rgba(255,255,255,0.02)',
+                material.colors[1],
+                '#FFFFFF',
+                material.colors[2],
+                'rgba(255,255,255,0.02)',
+              ]}
+              end={radiantEnd}
+              positions={[0, 0.38, 0.5, 0.62, 1]}
+              start={radiantStart}
+            />
+            <BlurMask blur={5.5} style="normal" />
+          </Path>
+          <Path path={insetPath} strokeWidth={2.25} style="stroke">
+            <SweepGradient
+              c={vec(center.x, center.y)}
+              colors={[
+                material.colors[2],
+                material.colors[1],
+                '#FFFFFF',
+                material.colors[1],
+                material.colors[2],
+              ]}
+              end={radiantEnd}
+              positions={[0, 0.38, 0.5, 0.62, 1]}
+              start={radiantStart}
+            />
+          </Path>
+        </>
+      ) : null}
+    </Group>
+  );
+}
+
+function FluidLabel({
+  distance,
+  interactionToken,
+  labelOpacityTarget,
+  materialOpacityTarget,
+  material,
+  reduceMotion,
+  renderFace,
+  selected,
+}: FluidLabelProps) {
+  const { center, cellSize, face } = renderFace;
+  const { labelStyle } = useFaceMotion({
+    distance,
+    interactionToken,
+    labelOpacityTarget,
+    materialOpacityTarget,
+    reduceMotion,
+    selected,
+  });
+  const chordFontSize = Math.max(12, Math.min(18, cellSize * 0.23));
+  const chordLineHeight = chordFontSize * 1.08;
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.chordLabelFrame,
+        {
+          height: chordLineHeight,
+          left: center.x - cellSize * 0.36,
+          top: center.y - chordLineHeight / 2,
+          width: cellSize * 0.72,
+        },
+        labelStyle,
+      ]}
+    >
+      <Text
+        numberOfLines={1}
+        style={[
+          styles.chordLabel,
+          {
+            color: selected ? '#FFFDF9' : material.inScale ? '#F7F8FF' : '#CBD3E6',
+            fontSize: chordFontSize,
+            lineHeight: chordLineHeight,
+          },
+        ]}
+      >
+        {chordLabel(face)}
+      </Text>
+    </Animated.View>
+  );
+}
+
 export function TonnetzArtifact({
   selectedId,
   scaleMode,
@@ -186,6 +473,9 @@ export function TonnetzArtifact({
   onSelect,
 }: TonnetzArtifactProps) {
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const [interaction, setInteraction] = useState<InteractionState>({ faceId: null, token: 0 });
+  const reduceMotion = useReducedMotion();
+  const clock = useClock();
   const renderGeometry = useMemo(
     () => makeRenderGeometry(size.width, size.height),
     [size.height, size.width],
@@ -198,10 +488,27 @@ export function TonnetzArtifact({
       ),
     [selectedId],
   );
+  const interactionRings = useMemo(
+    () =>
+      interaction.faceId
+        ? resolveFluidTonnetzRings(FACES, interaction.faceId, 2)
+        : new Map<string, number>(),
+    [interaction.faceId],
+  );
+  const orderedFaces = useMemo(() => {
+    const selectedFace = renderGeometry.faces.find(({ face }) => face.id === selectedId);
+    if (!selectedFace) return renderGeometry.faces;
+    return [...renderGeometry.faces.filter(({ face }) => face.id !== selectedId), selectedFace];
+  }, [renderGeometry.faces, selectedId]);
 
   const handleLayout = (event: LayoutChangeEvent): void => {
     const { width, height } = event.nativeEvent.layout;
     setSize({ width, height });
+  };
+
+  const handleFacePress = (face: FiniteTonnetzFace): void => {
+    setInteraction((current) => ({ faceId: face.id, token: current.token + 1 }));
+    onSelect(face);
   };
 
   return (
@@ -214,57 +521,64 @@ export function TonnetzArtifact({
           />
         </Rect>
         <Group>
-          {renderGeometry.faces.map(({ face, path }) => {
-            const selected = face.id === selectedId;
-            const { base, inScale, isTonic } = resolveFaceAppearance(face, scaleRootPc, scaleMode);
+          {renderGeometry.faces.map(({ canonicalPath, face }) => (
+            <Path
+              key={`${face.id}:topology`}
+              color="#6D7690"
+              opacity={0.2}
+              path={canonicalPath}
+              strokeWidth={0.8}
+              style="stroke"
+            />
+          ))}
+        </Group>
+        <Group>
+          {orderedFaces.map((renderFace) => {
+            const selected = renderFace.face.id === selectedId;
+            const material = resolveFluidTonnetzMaterial(
+              renderFace.face,
+              scaleRootPc,
+              scaleMode,
+              selected,
+            );
             return (
-              <Group key={face.id}>
-                {selected || isTonic ? (
-                  <Path path={path} color="#f7f8ff" style="stroke" strokeWidth={8} opacity={0.2} />
-                ) : null}
-                <Path
-                  path={path}
-                  color={selected ? '#f3b15a' : base}
-                  opacity={selected ? 0.95 : inScale ? (isTonic ? 0.52 : 0.3) : 0.055}
-                />
-                <Path
-                  path={path}
-                  color={selected ? '#ffffff' : inScale ? base : '#586071'}
-                  style="stroke"
-                  strokeWidth={selected ? 1.8 : inScale ? 1.15 : 0.65}
-                  opacity={selected ? 0.9 : inScale ? 0.78 : 0.28}
-                />
-              </Group>
+              <FluidFace
+                key={renderFace.face.id}
+                clock={clock}
+                distance={interactionRings.get(renderFace.face.id)}
+                interactionToken={interaction.token}
+                labelOpacityTarget={material.labelOpacity}
+                material={material}
+                materialOpacityTarget={material.opacity}
+                reduceMotion={reduceMotion}
+                renderFace={renderFace}
+                selected={selected}
+              />
             );
           })}
         </Group>
       </Canvas>
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        {renderGeometry.faces.map(({ center, cellSize, face }) => {
-          const selected = face.id === selectedId;
-          const { base, inScale } = resolveFaceAppearance(face, scaleRootPc, scaleMode);
-          const chordFontSize = Math.max(12, Math.min(18, cellSize * 0.23));
-          const chordLineHeight = chordFontSize * 1.08;
-
+        {orderedFaces.map((renderFace) => {
+          const selected = renderFace.face.id === selectedId;
+          const material = resolveFluidTonnetzMaterial(
+            renderFace.face,
+            scaleRootPc,
+            scaleMode,
+            selected,
+          );
           return (
-            <Text
-              key={`${face.id}:label`}
-              numberOfLines={1}
-              style={[
-                styles.chordLabel,
-                {
-                  color: selected ? '#fff4dc' : base,
-                  fontSize: chordFontSize,
-                  lineHeight: chordLineHeight,
-                  left: center.x - cellSize * 0.36,
-                  opacity: selected ? 1 : inScale ? 0.96 : 0.58,
-                  top: center.y - chordLineHeight / 2,
-                  width: cellSize * 0.72,
-                },
-              ]}
-            >
-              {chordLabel(face)}
-            </Text>
+            <FluidLabel
+              key={`${renderFace.face.id}:label`}
+              distance={interactionRings.get(renderFace.face.id)}
+              interactionToken={interaction.token}
+              labelOpacityTarget={material.labelOpacity}
+              material={material}
+              materialOpacityTarget={material.opacity}
+              reduceMotion={reduceMotion}
+              renderFace={renderFace}
+              selected={selected}
+            />
           );
         })}
         {renderGeometry.nodes.map(({ key, pitchClass, point }) => {
@@ -279,7 +593,7 @@ export function TonnetzArtifact({
               style={[
                 styles.noteBadge,
                 {
-                  borderColor: selected ? '#f3b15a' : 'rgba(255, 255, 255, 0.82)',
+                  borderColor: selected ? '#FFD166' : 'rgba(255, 255, 255, 0.82)',
                   borderRadius: nodeSize / 2,
                   borderWidth: selected ? 2 : 1,
                   height: nodeSize,
@@ -308,7 +622,7 @@ export function TonnetzArtifact({
               .map((pitchClass) => NOTE_NAMES[pitchClass])
               .join(', ')}`}
             accessibilityRole="button"
-            onPress={() => onSelect(face)}
+            onPress={() => handleFacePress(face)}
             style={[styles.faceTarget, hitStyle]}
           />
         ))}
@@ -325,10 +639,12 @@ const styles = StyleSheet.create({
   faceTarget: {
     position: 'absolute',
   },
+  chordLabelFrame: {
+    position: 'absolute',
+  },
   chordLabel: {
     fontWeight: '800',
     letterSpacing: -0.35,
-    position: 'absolute',
     textAlign: 'center',
     textShadowColor: 'rgba(0, 0, 0, 0.88)',
     textShadowOffset: { width: 0, height: 1 },
