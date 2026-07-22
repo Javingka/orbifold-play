@@ -27,6 +27,7 @@ interface ScaleBlurCarouselProps {
   onSelect: (option: ScaleCarouselOption) => void;
   options: readonly ScaleCarouselOption[];
   selectedId: string;
+  translucent?: boolean;
 }
 
 interface ScaleCardProps {
@@ -35,11 +36,12 @@ interface ScaleCardProps {
   onPress: () => void;
   scrollX: SharedValue<number>;
   selected: boolean;
+  translucent: boolean;
 }
 
 const ITEM_WIDTH = 104;
 
-function ScaleCard({ index, item, onPress, scrollX, selected }: ScaleCardProps) {
+function ScaleCard({ index, item, onPress, scrollX, selected, translucent }: ScaleCardProps) {
   const inputRange = [(index - 1) * ITEM_WIDTH, index * ITEM_WIDTH, (index + 1) * ITEM_WIDTH];
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: interpolate(scrollX.value, inputRange, [0.72, 1, 0.72], Extrapolation.CLAMP),
@@ -56,12 +58,17 @@ function ScaleCard({ index, item, onPress, scrollX, selected }: ScaleCardProps) 
         accessibilityRole="button"
         accessibilityState={{ selected }}
         onPress={onPress}
-        style={[styles.card, selected && styles.cardSelected]}
+        style={[
+          styles.card,
+          translucent && styles.cardTranslucent,
+          selected && styles.cardSelected,
+          selected && translucent && styles.cardSelectedTranslucent,
+        ]}
       >
         <Text style={[styles.title, selected && styles.titleSelected]}>{item.title}</Text>
         <Text style={styles.subtitle}>{item.subtitle}</Text>
         <BlurView
-          intensity={selected ? 0 : 4}
+          intensity={selected ? 0 : translucent ? 2 : 4}
           pointerEvents="none"
           style={StyleSheet.absoluteFill}
           tint="dark"
@@ -71,7 +78,12 @@ function ScaleCard({ index, item, onPress, scrollX, selected }: ScaleCardProps) 
   );
 }
 
-export function ScaleBlurCarousel({ options, selectedId, onSelect }: ScaleBlurCarouselProps) {
+export function ScaleBlurCarousel({
+  options,
+  selectedId,
+  onSelect,
+  translucent = false,
+}: ScaleBlurCarouselProps) {
   const { width } = useWindowDimensions();
   const scrollX = useSharedValue(0);
   const listRef = useRef<ScrollView>(null);
@@ -118,6 +130,7 @@ export function ScaleBlurCarousel({ options, selectedId, onSelect }: ScaleBlurCa
             onPress={() => selectOption(item, index)}
             scrollX={scrollX}
             selected={item.id === selectedId}
+            translucent={translucent}
           />
         ))}
       </Animated.ScrollView>
@@ -142,6 +155,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#11151d',
   },
   cardSelected: { borderColor: '#8aa0ff', backgroundColor: '#20283c' },
+  cardTranslucent: { backgroundColor: 'rgba(17, 21, 29, 0.62)' },
+  cardSelectedTranslucent: { backgroundColor: 'rgba(32, 40, 60, 0.7)' },
   title: { color: '#929bad', fontSize: 9, fontWeight: '800', letterSpacing: 0.65 },
   titleSelected: { color: '#f7f8ff' },
   subtitle: { color: '#596275', fontSize: 7, fontWeight: '700', letterSpacing: 0.5 },

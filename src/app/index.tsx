@@ -7,7 +7,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { SkiaReady } from '@/components/async-skia';
 import { MorphLoader } from '@/components/morph-loader';
 import { ParallaxCarousel } from '@/components/parallax-carousel';
-import { ScaleBlurCarousel, type ScaleCarouselOption } from '@/components/scale-blur-carousel';
+import type { ScaleCarouselOption } from '@/components/scale-blur-carousel';
+import { ScaleDialog } from '@/components/scale-dialog';
 import { StackedChips } from '@/components/stacked-chips';
 import { ViewModeIndicator } from '@/components/view-mode-indicator';
 import type { RhythmOrbitLayer } from '@/components/rhythm-orbits';
@@ -116,6 +117,7 @@ function chordLabel(face: FiniteTonnetzFace): string {
 export default function Page() {
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const instrumentStageHeight = Math.max(270, Math.min(360, screenHeight * 0.43));
+  const harmonyStageHeight = Math.max(220, instrumentStageHeight - 62);
   const [view, setView] = useState<InstrumentView>('harmony');
   const [selected, setSelected] = useState<FiniteTonnetzFace | null>(null);
   const [sequence, setSequence] = useState<readonly FiniteTonnetzFace[]>([]);
@@ -125,6 +127,7 @@ export default function Page() {
   const [selectedScale, setSelectedScale] = useState<ScaleCarouselOption>(
     SCALE_OPTIONS[0] as ScaleCarouselOption,
   );
+  const [scaleDialogOpen, setScaleDialogOpen] = useState(false);
   const [transport, setTransport] = useState<TransportState>('idle');
   const [audioError, setAudioError] = useState<string | null>(null);
   const playbackRequest = useRef(0);
@@ -279,6 +282,7 @@ export default function Page() {
     if (viewRef.current === nextView) return;
     viewRef.current = nextView;
     setView(nextView);
+    if (nextView === 'rhythm') setScaleDialogOpen(false);
     void Haptics.selectionAsync();
   }, []);
 
@@ -327,6 +331,31 @@ export default function Page() {
       </View>
 
       <View style={styles.transportLine}>
+        {view === 'harmony' ? (
+          <Pressable
+            accessibilityLabel={`Open musical scale menu. Current scale: ${selectedScale.title}`}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: scaleDialogOpen }}
+            hitSlop={6}
+            onPress={() => {
+              setScaleDialogOpen((current) => !current);
+              void Haptics.selectionAsync();
+            }}
+            style={[styles.scaleMenuButton, scaleDialogOpen && styles.scaleMenuButtonActive]}
+          >
+            <View style={styles.scaleMenuIcon}>
+              <View style={styles.scaleMenuLine}>
+                <View style={[styles.scaleMenuNote, styles.scaleMenuNoteLeft]} />
+              </View>
+              <View style={styles.scaleMenuLine}>
+                <View style={[styles.scaleMenuNote, styles.scaleMenuNoteRight]} />
+              </View>
+              <View style={styles.scaleMenuLine}>
+                <View style={[styles.scaleMenuNote, styles.scaleMenuNoteCenter]} />
+              </View>
+            </View>
+          </Pressable>
+        ) : null}
         <View
           style={[
             styles.transportDot,
@@ -349,18 +378,16 @@ export default function Page() {
                   content: (
                     <View style={styles.instrumentPage}>
                       <View
-                        style={[
-                          styles.stage,
-                          styles.harmonyStage,
-                          { height: instrumentStageHeight },
-                        ]}
+                        style={[styles.stage, styles.harmonyStage, { height: harmonyStageHeight }]}
                       >
-                        <ScaleBlurCarousel
-                          onSelect={handleScaleSelect}
-                          options={SCALE_OPTIONS}
-                          selectedId={selectedScale.id}
-                        />
-                        <View style={styles.hexagonArea}>
+                        <View
+                          accessibilityElementsHidden={scaleDialogOpen}
+                          aria-hidden={scaleDialogOpen}
+                          importantForAccessibility={
+                            scaleDialogOpen ? 'no-hide-descendants' : 'auto'
+                          }
+                          style={styles.hexagonArea}
+                        >
                           <TonnetzArtifact
                             selectedId={selected?.id ?? null}
                             scaleMode={selectedScale.mode}
@@ -368,6 +395,13 @@ export default function Page() {
                             onSelect={handleChordSelect}
                           />
                         </View>
+                        <ScaleDialog
+                          onClose={() => setScaleDialogOpen(false)}
+                          onSelect={handleScaleSelect}
+                          options={SCALE_OPTIONS}
+                          selectedId={selectedScale.id}
+                          visible={scaleDialogOpen}
+                        />
                       </View>
                       <View style={styles.readout}>
                         <Text style={styles.readoutValue}>{selectedLabel}</Text>
@@ -484,7 +518,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#171a21',
   },
   transportLine: {
-    minHeight: 24,
+    minHeight: 28,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 18,
@@ -494,6 +528,38 @@ const styles = StyleSheet.create({
   transportDotPlaying: { backgroundColor: '#56cfc4' },
   transportDotError: { backgroundColor: '#e87bac' },
   transportText: { color: '#7f889c', fontSize: 9, fontWeight: '700', letterSpacing: 1.2 },
+  scaleMenuButton: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: 'rgba(21, 25, 35, 0.72)',
+    borderColor: 'rgba(138, 160, 255, 0.22)',
+    borderWidth: 1,
+  },
+  scaleMenuButtonActive: {
+    backgroundColor: 'rgba(45, 54, 82, 0.84)',
+    borderColor: '#8AA0FF',
+  },
+  scaleMenuIcon: { width: 13, height: 13, justifyContent: 'space-between' },
+  scaleMenuLine: {
+    width: 13,
+    height: 1,
+    backgroundColor: '#AAB5CE',
+    position: 'relative',
+  },
+  scaleMenuNote: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#F7F8FF',
+    position: 'absolute',
+    top: -1.5,
+  },
+  scaleMenuNoteLeft: { left: 1 },
+  scaleMenuNoteCenter: { left: 4.5 },
+  scaleMenuNoteRight: { right: 1 },
   carouselArea: { flex: 1, minHeight: 316 },
   instrumentPage: { flex: 1 },
   stage: { flexShrink: 0, minHeight: 220, overflow: 'hidden' },
