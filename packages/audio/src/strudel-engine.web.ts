@@ -8,9 +8,12 @@ import {
   getAudioContext,
   initAudio,
   miniAllStrings,
+  samples,
   webaudioScheduler,
 } from '@strudel/web';
 import type { Cyclist } from '@strudel/web';
+
+import { buildRhythmSampleMap } from './rhythm-sample-map';
 
 export interface PlaybackResult {
   ok: boolean;
@@ -22,7 +25,7 @@ let playing = false;
 
 const readyPromise = (async () => {
   miniAllStrings();
-  await defaultPrebake();
+  await Promise.all([defaultPrebake(), samples(buildRhythmSampleMap())]);
   scheduler = webaudioScheduler();
   const ownedScheduler = scheduler;
   const patternPrototype = Pattern.prototype as unknown as {

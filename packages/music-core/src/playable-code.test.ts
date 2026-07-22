@@ -11,11 +11,9 @@ describe('mobile playable Strudel codegen', () => {
   it('emits visible rhythm steps without global time stretching', () => {
     const code = rhythmPattern({
       steps: [1, 0, 1, 0],
-      instrument: 'sine',
-      note: 'c2',
-      gain: 0.5,
-      decay: 0.1,
-      lpf: 900,
+      soundId: 'sub',
+      role: 'pulse',
+      audioOrbit: 2,
     });
     expect(code).toContain('note("c2 ~ c2 ~")');
     expect(code).not.toContain('.fast');
@@ -39,14 +37,40 @@ describe('mobile playable Strudel codegen', () => {
         rhythmLayers: [
           {
             steps: [1, 0, 0, 0],
-            instrument: 'square',
-            note: 'g4',
-            gain: 0.2,
-            decay: 0.04,
-            lpf: 2400,
+            soundId: 'digital',
+            role: 'click',
+            audioOrbit: 3,
           },
         ],
       }),
     ).toMatch(/^stack\(/);
+  });
+
+  it('round-robins local samples and keeps timing modifiers out of rhythm code', () => {
+    const code = rhythmPattern({
+      steps: [1, 0, 1, 1, 0, 1],
+      soundId: 'cajon',
+      role: 'pulse',
+      audioOrbit: 2,
+    });
+    expect(code).toContain('s("cajon:0 ~ cajon:1 cajon:2 ~ cajon:3")');
+    expect(code).toContain('.velocity("1 0 0.9 0.72 0 0.84")');
+    expect(code).toContain('.orbit(2)');
+    expect(code).not.toContain('.fast');
+    expect(code).not.toContain('.slow');
+  });
+
+  it('builds role-specific hybrid layers without moving their events', () => {
+    const code = rhythmPattern({
+      steps: [1, 0, 0, 1],
+      soundId: 'hybrid',
+      role: 'air',
+      audioOrbit: 4,
+    });
+    expect(code).toContain('shaker:0 ~ ~ shaker:1');
+    expect(code).toContain('.hpf(1000)');
+    expect(code).toContain('.orbit(4)');
+    expect(code).not.toContain('.fast');
+    expect(code).not.toContain('.slow');
   });
 });

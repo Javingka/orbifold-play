@@ -25,5 +25,6 @@ declare module '@strudel/web' {
   export function getAudioContext(): AudioContext;
   export function initAudio(options?: Record<string, unknown>): Promise<void>;
   export function miniAllStrings(): void;
+  export function samples(sampleMap: Record<string, string | string[]>): Promise<void>;
   export function webaudioScheduler(options?: Record<string, unknown>): Cyclist;
 }
