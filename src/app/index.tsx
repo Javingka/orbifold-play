@@ -10,6 +10,7 @@ import { ParallaxCarousel } from '@/components/parallax-carousel';
 import type { ScaleCarouselOption } from '@/components/scale-blur-carousel';
 import { ScaleDialog } from '@/components/scale-dialog';
 import { StackedChips } from '@/components/stacked-chips';
+import { SwipeHintText } from '@/components/swipe-hint-text';
 import { ViewModeIndicator } from '@/components/view-mode-indicator';
 import type { RhythmOrbitLayer } from '@/components/rhythm-orbits';
 import {
@@ -116,8 +117,8 @@ function chordLabel(face: FiniteTonnetzFace): string {
 
 export default function Page() {
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
-  const instrumentStageHeight = Math.max(270, Math.min(360, screenHeight * 0.43));
-  const harmonyStageHeight = Math.max(220, instrumentStageHeight - 62);
+  const rhythmStageHeight = Math.max(270, Math.min(360, screenHeight * 0.43));
+  const harmonyStageHeight = Math.max(284, Math.min(420, screenHeight * 0.5));
   const [view, setView] = useState<InstrumentView>('harmony');
   const [selected, setSelected] = useState<FiniteTonnetzFace | null>(null);
   const [sequence, setSequence] = useState<readonly FiniteTonnetzFace[]>([]);
@@ -319,6 +320,11 @@ export default function Page() {
           <Text style={styles.title}>
             {view === 'harmony' ? 'Harmonic object' : 'Rhythm orbits'}
           </Text>
+          {view === 'harmony' ? (
+            <SwipeHintText onPress={() => handleViewChange('rhythm')} />
+          ) : (
+            <View style={styles.headerHintSpacer} />
+          )}
         </View>
         <React.Suspense fallback={<View style={styles.switchFallback} />}>
           <SkiaReady>
@@ -405,7 +411,7 @@ export default function Page() {
                       </View>
                       <View style={styles.readout}>
                         <Text style={styles.readoutValue}>{selectedLabel}</Text>
-                        <Text style={styles.readoutHint}>TAP TRIANGLES · SWIPE FOR RHYTHM →</Text>
+                        <Text style={styles.readoutHint}>TAP TRIANGLES · BUILD YOUR SEQUENCE</Text>
                       </View>
                       <ViewModeIndicator active="harmony" />
                       <SkiaReady>
@@ -428,11 +434,7 @@ export default function Page() {
                   content: (
                     <View style={styles.instrumentPage}>
                       <View
-                        style={[
-                          styles.stage,
-                          styles.rhythmStage,
-                          { height: instrumentStageHeight },
-                        ]}
+                        style={[styles.stage, styles.rhythmStage, { height: rhythmStageHeight }]}
                       >
                         <RhythmOrbits
                           getPhase={getStrudelPhase}
@@ -511,6 +513,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     marginTop: 4,
   },
+  headerHintSpacer: { height: 16 },
   switchFallback: {
     width: 72,
     height: 40,

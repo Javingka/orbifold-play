@@ -36,3 +36,27 @@ transition to Rhythm all dismiss it.
 - Browser 320×568: closed stage and open dialog remained fully visible without
   horizontal clipping or collision with the readout/transport.
 - No dependency, audio, rhythm, chord, sequence, or saved-data change.
+
+## Step 01.2 — Stronger surface and recovered stage height
+
+Status: complete
+
+The stage no longer subtracts the old carousel's 62 px from Harmony. Harmony
+now has its own responsive 284–420 px height range, so the Diamond directly
+occupies the recovered space while Rhythm retains its independent sizing.
+
+The dialog combines a moderate 24-intensity dark blur with higher-alpha panel
+and card layers. Scale names are easier to scan, but live Tonnetz recoloring
+remains perceptible behind the surface. An Animated Text-inspired staggered
+hint now alternates between swipe and tap guidance below “Harmonic object”;
+tapping it opens Rhythm and reduced-motion mode leaves the guidance static.
+
+## Step 01.2 Acceptance Coverage Table
+
+| Acceptance | Evidence | Status |
+| --- | --- | --- |
+| A-01-03 | Moderate blurred panel and higher-alpha cards retain visible live Tonnetz recoloring | Pass |
+| A-01-04 | Navigation hint delegates to the existing view-change path; music state contracts are unchanged | Pass |
+| A-01-05 | Test, typecheck, lint, formatting, and web export pass | Pass |
+| A-01-06 | Browser checks at 320×568 and 390×844 show the larger Diamond without transport clipping | Pass |
+| A-01-07 | Browser click on the animated hint opens Rhythm; accessibility and reduced-motion behavior are defined | Pass |

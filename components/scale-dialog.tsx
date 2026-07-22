@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Adapted from ReactICX Dialog for a transparent, stage-local scale picker.
+import { BlurView } from 'expo-blur';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
@@ -93,6 +94,8 @@ export function ScaleDialog({ onClose, onSelect, options, selectedId, visible }:
         />
       </Animated.View>
       <Animated.View style={[styles.content, contentStyle]}>
+        <BlurView intensity={24} pointerEvents="none" style={StyleSheet.absoluteFill} tint="dark" />
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.contentTint]} />
         <View style={styles.dialogHeader}>
           <View>
             <Text style={styles.eyebrow}>MUSICAL SCALE</Text>
@@ -130,19 +133,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 20,
   },
-  backdrop: { backgroundColor: 'rgba(5, 6, 9, 0.2)' },
+  backdrop: { backgroundColor: 'rgba(5, 6, 9, 0.3)' },
   content: {
     width: '100%',
     maxWidth: 430,
     minHeight: 102,
     justifyContent: 'center',
-    backgroundColor: 'rgba(5, 6, 9, 0.12)',
+    overflow: 'hidden',
+    backgroundColor: 'rgba(5, 6, 9, 0.3)',
     borderColor: 'rgba(138, 160, 255, 0.2)',
     borderTopWidth: 1,
     borderBottomWidth: 1,
     paddingTop: 4,
     paddingBottom: 7,
   },
+  contentTint: { backgroundColor: 'rgba(8, 11, 19, 0.34)' },
   dialogHeader: {
     height: 28,
     flexDirection: 'row',
