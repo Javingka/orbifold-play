@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import type { RhythmOrbitRole, RhythmSoundId } from '@/packages/music-core/src/rhythm-sounds';
+
 export interface PlaybackResult {
   ok: boolean;
   error?: string;
@@ -7,6 +9,13 @@ export interface PlaybackResult {
 export function prepareStrudelAudio(): void {}
 
 export async function playStrudel(_code: string, _bpm: number): Promise<PlaybackResult> {
+  return { ok: false, error: 'Native audio adapter is not implemented yet' };
+}
+
+export async function previewRhythmSound(
+  _soundId: RhythmSoundId,
+  _role: RhythmOrbitRole,
+): Promise<PlaybackResult> {
   return { ok: false, error: 'Native audio adapter is not implemented yet' };
 }
 

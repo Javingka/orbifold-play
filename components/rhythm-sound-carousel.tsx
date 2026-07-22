@@ -17,6 +17,7 @@ import type { RhythmSoundId, RhythmSoundOption } from '@/packages/music-core/src
 
 interface RhythmSoundCarouselProps {
   accentColor: string;
+  onAudition: (soundId: RhythmSoundId) => void;
   onSelect: (soundId: RhythmSoundId) => void;
   options: readonly RhythmSoundOption[];
   selectedId: RhythmSoundId;
@@ -47,7 +48,8 @@ function SoundCard({ accentColor, index, item, onPress, scrollX, selected }: Sou
   return (
     <Animated.View style={[styles.item, animatedStyle]}>
       <Pressable
-        accessibilityLabel={`Select ${item.title} sound`}
+        accessibilityHint="Selects this sound and plays a short preview"
+        accessibilityLabel={`Select and preview ${item.title} sound`}
         accessibilityRole="button"
         accessibilityState={{ selected }}
         onPress={onPress}
@@ -75,6 +77,7 @@ function SoundCard({ accentColor, index, item, onPress, scrollX, selected }: Sou
 
 export function RhythmSoundCarousel({
   accentColor,
+  onAudition,
   onSelect,
   options,
   selectedId,
@@ -103,6 +106,7 @@ export function RhythmSoundCarousel({
 
   const selectOption = (option: RhythmSoundOption, index: number): void => {
     onSelect(option.id);
+    onAudition(option.id);
     listRef.current?.scrollTo({ animated: true, x: index * ITEM_WIDTH });
   };
 

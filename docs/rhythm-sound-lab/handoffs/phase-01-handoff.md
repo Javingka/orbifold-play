@@ -39,3 +39,26 @@ an eight-option carousel. Selections apply immediately to an active pattern.
 - Browser 320×568: live-playing modal, three orbit mappings, carousel, readout,
   and transport remained visible and interactive.
 - No dependency, rhythm-step, tempo, or persisted-data change.
+
+## Step 01.2 — Independent card audition
+
+Status: complete
+
+Every sound card now selects and immediately auditions its sound. Organic
+cards rotate through their local sample variants; Sub, Digital, and Noise use
+a short synthesized preview; Hybrid combines the role-specific organic and
+synthetic sources. A new tap cancels only the previous preview.
+
+Preview playback uses the existing Web Audio context but never calls
+`evaluate()` or changes the Strudel scheduler pattern. Re-tapping the already
+selected card therefore auditions it without reapplying the rhythm. Changing a
+sound while playing still updates the pattern and overlays the short preview,
+while the transport and playhead remain active.
+
+## Step 01.2 Acceptance Coverage Table
+
+| Acceptance | Evidence | Status |
+| --- | --- | --- |
+| A-01-05 | Browser selected and auditioned Conga while `RHYTHM PLAYING` remained active | Pass |
+| A-01-07 | Test, typecheck, lint, formatting, and web export pass | Pass |
+| A-01-08 | Browser selected/auditioned Cajón with stopped transport; selection changed, Play remained idle, and no preview error was logged | Pass |

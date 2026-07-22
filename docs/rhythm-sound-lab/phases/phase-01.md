@@ -25,6 +25,9 @@ interactive steps, synchronized playhead, and compact mobile interface.
   identifies Pulse as outer, Click as middle, and Air as inner.
 - Apply sound choices live when transport is playing without changing steps or
   view/playhead timing.
+- Audition a short one-shot directly from every sound card. Preview audio uses
+  an independent Web Audio path and never replaces or restarts the Strudel
+  pattern scheduler.
 - Add no dependency and retain the local/offline sample license.
 
 ## Acceptance criteria
@@ -42,6 +45,8 @@ interactive steps, synchronized playhead, and compact mobile interface.
 - **A-01-06** — The closed and open states remain usable at 320×568 and
   390×844.
 - **A-01-07** — Tests, typecheck, lint, formatting, and web export pass.
+- **A-01-08** — Tapping any sound card emits an immediate preview while the
+  transport remains stopped or continues playing unchanged.
 
 ## Validation
 
@@ -60,3 +65,6 @@ mobile viewports.
 
 Commit message:
 `feat(rhythm-sound): Phase 01 step 01.1 — add orbit sound lab`
+
+Fast-follow commit message:
+`feat(rhythm-sound): Phase 01 step 01.2 — audition sound cards`

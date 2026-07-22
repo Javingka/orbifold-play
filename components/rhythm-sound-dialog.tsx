@@ -31,6 +31,7 @@ export interface RhythmSoundDialogLayer {
 
 interface RhythmSoundDialogProps {
   layers: readonly RhythmSoundDialogLayer[];
+  onAuditionSound: (layerId: string, soundId: RhythmSoundId) => void;
   onClose: () => void;
   onSelectSound: (layerId: string, soundId: RhythmSoundId) => void;
   visible: boolean;
@@ -45,6 +46,7 @@ const ORBIT_POSITION: Record<RhythmOrbitRole, string> = {
 
 export function RhythmSoundDialog({
   layers,
+  onAuditionSound,
   onClose,
   onSelectSound,
   visible,
@@ -172,6 +174,7 @@ export function RhythmSoundDialog({
 
         <RhythmSoundCarousel
           accentColor={selectedLayer.color}
+          onAudition={(soundId) => onAuditionSound(selectedLayer.id, soundId)}
           onSelect={(soundId) => onSelectSound(selectedLayer.id, soundId)}
           options={RHYTHM_SOUND_OPTIONS}
           selectedId={selectedLayer.soundId}

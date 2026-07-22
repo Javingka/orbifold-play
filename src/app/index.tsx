@@ -19,6 +19,7 @@ import {
   getStrudelPhase,
   playStrudel,
   prepareStrudelAudio,
+  previewRhythmSound,
   stopStrudel,
 } from '@/packages/audio/src/strudel-engine';
 import { bjorklund } from '@/packages/music-core/src/euclidean';
@@ -292,15 +293,22 @@ export default function Page() {
   }, []);
 
   const handleRhythmSoundSelect = (layerId: string, soundId: RhythmSoundId): void => {
-    const nextLayers = rhythmLayers.map((layer) =>
-      layer.id === layerId ? { ...layer, soundId } : layer,
-    );
+    const nextLayers = rhythmLayers.map((layer) => {
+      if (layer.id !== layerId || layer.soundId === soundId) return layer;
+      return { ...layer, soundId };
+    });
     if (nextLayers.every((layer, index) => layer === rhythmLayers[index])) return;
     setRhythmLayers(nextLayers);
     void Haptics.selectionAsync();
     if (playingRef.current && rhythmIncluded) {
       void applyPlayback(currentSnapshot({ layers: nextLayers }));
     }
+  };
+
+  const handleRhythmSoundAudition = (layerId: string, soundId: RhythmSoundId): void => {
+    const layer = rhythmLayers.find((candidate) => candidate.id === layerId);
+    if (!layer) return;
+    void previewRhythmSound(soundId, layer.role);
   };
 
   const selectedLabel = selected ? chordLabel(selected) : 'Build a sequence';
@@ -483,6 +491,7 @@ export default function Page() {
                         </View>
                         <RhythmSoundDialog
                           layers={rhythmLayers}
+                          onAuditionSound={handleRhythmSoundAudition}
                           onClose={() => setRhythmSoundDialogOpen(false)}
                           onSelectSound={handleRhythmSoundSelect}
                           visible={rhythmSoundDialogOpen}
