@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Adapted from ReactICX Blur Carousel as a compact musical-scale selector.
+// Compact translucent sound selector for the rhythm-orbit dialog.
 import { BlurView } from 'expo-blur';
 import React, { useRef } from 'react';
 import type { NativeScrollEvent, NativeSyntheticEvent, ScrollView } from 'react-native';
@@ -13,80 +13,82 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 
-import type { ScaleMode } from '@/packages/music-core/src/scales';
+import type { RhythmSoundId, RhythmSoundOption } from '@/packages/music-core/src/rhythm-sounds';
 
-export interface ScaleCarouselOption {
-  id: string;
-  mode: ScaleMode;
-  rootPc: number;
-  subtitle: string;
-  title: string;
+interface RhythmSoundCarouselProps {
+  accentColor: string;
+  onAudition: (soundId: RhythmSoundId) => void;
+  onSelect: (soundId: RhythmSoundId) => void;
+  options: readonly RhythmSoundOption[];
+  selectedId: RhythmSoundId;
 }
 
-interface ScaleBlurCarouselProps {
-  onSelect: (option: ScaleCarouselOption) => void;
-  options: readonly ScaleCarouselOption[];
-  selectedId: string;
-  translucent?: boolean;
-}
-
-interface ScaleCardProps {
+interface SoundCardProps {
+  accentColor: string;
   index: number;
-  item: ScaleCarouselOption;
+  item: RhythmSoundOption;
   onPress: () => void;
   scrollX: SharedValue<number>;
   selected: boolean;
-  translucent: boolean;
 }
 
-const ITEM_WIDTH = 104;
+const ITEM_WIDTH = 106;
 
-function ScaleCard({ index, item, onPress, scrollX, selected, translucent }: ScaleCardProps) {
+function SoundCard({ accentColor, index, item, onPress, scrollX, selected }: SoundCardProps) {
   const inputRange = [(index - 1) * ITEM_WIDTH, index * ITEM_WIDTH, (index + 1) * ITEM_WIDTH];
   const animatedStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(scrollX.value, inputRange, [0.72, 1, 0.72], Extrapolation.CLAMP),
+    opacity: interpolate(scrollX.value, inputRange, [0.68, 1, 0.68], Extrapolation.CLAMP),
     transform: [
       {
-        scale: interpolate(scrollX.value, inputRange, [0.92, 1, 0.92], Extrapolation.CLAMP),
+        scale: interpolate(scrollX.value, inputRange, [0.91, 1, 0.91], Extrapolation.CLAMP),
       },
     ],
   }));
+
   return (
     <Animated.View style={[styles.item, animatedStyle]}>
       <Pressable
-        accessibilityLabel={`Select ${item.title} scale`}
+        accessibilityHint="Selects this sound and plays a short preview"
+        accessibilityLabel={`Select and preview ${item.title} sound`}
         accessibilityRole="button"
         accessibilityState={{ selected }}
         onPress={onPress}
         style={[
           styles.card,
-          translucent && styles.cardTranslucent,
           selected && styles.cardSelected,
-          selected && translucent && styles.cardSelectedTranslucent,
+          selected && { borderColor: accentColor },
         ]}
       >
-        <Text style={[styles.title, selected && styles.titleSelected]}>{item.title}</Text>
-        <Text style={styles.subtitle}>{item.subtitle}</Text>
         <BlurView
-          intensity={selected ? 0 : translucent ? 2 : 4}
+          intensity={selected ? 0 : 3}
           pointerEvents="none"
           style={StyleSheet.absoluteFill}
           tint="dark"
         />
+        <Text style={[styles.title, selected && styles.titleSelected]}>{item.title}</Text>
+        <Text style={styles.subtitle}>{item.subtitle}</Text>
+        {selected ? (
+          <View style={[styles.selectedPulse, { backgroundColor: accentColor }]} />
+        ) : null}
       </Pressable>
     </Animated.View>
   );
 }
 
-export function ScaleBlurCarousel({
+export function RhythmSoundCarousel({
+  accentColor,
+  onAudition,
+  onSelect,
   options,
   selectedId,
-  onSelect,
-  translucent = false,
-}: ScaleBlurCarouselProps) {
+}: RhythmSoundCarouselProps) {
   const { width } = useWindowDimensions();
   const scrollX = useSharedValue(0);
   const listRef = useRef<ScrollView>(null);
+  const selectedIndex = Math.max(
+    0,
+    options.findIndex((option) => option.id === selectedId),
+  );
   const onScroll = useAnimatedScrollHandler({
     onScroll: (event) => {
       scrollX.value = event.contentOffset.x;
@@ -99,13 +101,18 @@ export function ScaleBlurCarousel({
       Math.min(options.length - 1, Math.round(event.nativeEvent.contentOffset.x / ITEM_WIDTH)),
     );
     const option = options[index];
-    if (option) onSelect(option);
+    if (option) onSelect(option.id);
   };
 
-  const selectOption = (option: ScaleCarouselOption, index: number): void => {
-    onSelect(option);
+  const selectOption = (option: RhythmSoundOption, index: number): void => {
+    onSelect(option.id);
+    onAudition(option.id);
     listRef.current?.scrollTo({ animated: true, x: index * ITEM_WIDTH });
   };
+
+  React.useEffect(() => {
+    listRef.current?.scrollTo({ animated: true, x: selectedIndex * ITEM_WIDTH });
+  }, [selectedIndex]);
 
   return (
     <View style={styles.wrapper}>
@@ -123,14 +130,14 @@ export function ScaleBlurCarousel({
         style={styles.list}
       >
         {options.map((item, index) => (
-          <ScaleCard
+          <SoundCard
             key={item.id}
+            accentColor={accentColor}
             index={index}
             item={item}
             onPress={() => selectOption(item, index)}
             scrollX={scrollX}
             selected={item.id === selectedId}
-            translucent={translucent}
           />
         ))}
       </Animated.ScrollView>
@@ -139,25 +146,24 @@ export function ScaleBlurCarousel({
 }
 
 const styles = StyleSheet.create({
-  wrapper: { height: 62, justifyContent: 'center' },
+  wrapper: { height: 64, justifyContent: 'center' },
   list: { flexGrow: 0 },
   item: { width: ITEM_WIDTH, alignItems: 'center', justifyContent: 'center' },
   card: {
-    width: 94,
-    height: 48,
+    width: 96,
+    height: 50,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 3,
     borderRadius: 15,
     borderWidth: 1,
-    borderColor: '#2d3340',
-    backgroundColor: '#11151d',
+    borderColor: 'rgba(86, 96, 116, 0.42)',
+    backgroundColor: 'rgba(17, 21, 29, 0.78)',
   },
-  cardSelected: { borderColor: '#8aa0ff', backgroundColor: '#20283c' },
-  cardTranslucent: { backgroundColor: 'rgba(17, 21, 29, 0.76)' },
-  cardSelectedTranslucent: { backgroundColor: 'rgba(32, 40, 60, 0.84)' },
-  title: { color: '#929bad', fontSize: 9, fontWeight: '800', letterSpacing: 0.65 },
-  titleSelected: { color: '#f7f8ff' },
-  subtitle: { color: '#596275', fontSize: 7, fontWeight: '700', letterSpacing: 0.5 },
+  cardSelected: { backgroundColor: 'rgba(32, 40, 60, 0.88)' },
+  title: { color: '#919AAC', fontSize: 9, fontWeight: '800', letterSpacing: 0.65 },
+  titleSelected: { color: '#F7F8FF' },
+  subtitle: { color: '#626D82', fontSize: 6.5, fontWeight: '700', letterSpacing: 0.45 },
+  selectedPulse: { width: 16, height: 2, borderRadius: 1, marginTop: 1 },
 });
