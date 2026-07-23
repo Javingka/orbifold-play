@@ -24,6 +24,11 @@ import {
 } from '@/packages/audio/src/strudel-engine';
 import { bjorklund } from '@/packages/music-core/src/euclidean';
 import type { FiniteTonnetzFace } from '@/packages/music-core/src/finite-tonnetz';
+import type { HarmonyDuration } from '@/packages/music-core/src/harmony-duration';
+import {
+  createHarmonySequenceEntry,
+  type HarmonySequenceEntry,
+} from '@/packages/music-core/src/harmony-sequence';
 import {
   buildPlayablePattern,
   type PlayableRhythmLayer,
@@ -102,7 +107,7 @@ const INITIAL_RHYTHM_LAYERS: readonly AppRhythmLayer[] = [
 ];
 
 interface PlaybackSnapshot {
-  sequence: readonly FiniteTonnetzFace[];
+  sequence: readonly HarmonySequenceEntry[];
   harmonyIncluded: boolean;
   rhythmIncluded: boolean;
   layers: readonly AppRhythmLayer[];
@@ -118,7 +123,7 @@ export default function Page() {
   const harmonyStageHeight = Math.max(284, Math.min(420, screenHeight * 0.5));
   const [view, setView] = useState<InstrumentView>('harmony');
   const [selected, setSelected] = useState<FiniteTonnetzFace | null>(null);
-  const [sequence, setSequence] = useState<readonly FiniteTonnetzFace[]>([]);
+  const [sequence, setSequence] = useState<readonly HarmonySequenceEntry[]>([]);
   const [rhythmLayers, setRhythmLayers] = useState(INITIAL_RHYTHM_LAYERS);
   const [harmonyIncluded, setHarmonyIncluded] = useState(true);
   const [rhythmIncluded, setRhythmIncluded] = useState(true);
@@ -152,9 +157,11 @@ export default function Page() {
       const code = buildPlayablePattern({
         ...(snapshot.harmonyIncluded && snapshot.sequence.length > 0
           ? {
-              chords: snapshot.sequence.map((face) => ({
-                rootPc: face.rootPc,
-                quality: face.quality,
+              chords: snapshot.sequence.map((entry) => ({
+                duration: entry.duration,
+                muted: entry.muted,
+                rootPc: entry.face.rootPc,
+                quality: entry.face.quality,
               })),
             }
           : {}),
@@ -216,8 +223,9 @@ export default function Page() {
   };
 
   const handleChordSelect = (face: FiniteTonnetzFace): void => {
+    const entry = createHarmonySequenceEntry(face);
     const nextSequence =
-      sequence.length >= MAX_SEQUENCE_LENGTH ? [...sequence.slice(1), face] : [...sequence, face];
+      sequence.length >= MAX_SEQUENCE_LENGTH ? [...sequence.slice(1), entry] : [...sequence, entry];
     setSelected(face);
     setSequence(nextSequence);
     void Haptics.selectionAsync();
@@ -229,7 +237,27 @@ export default function Page() {
   const handleRemoveChord = (index: number): void => {
     const nextSequence = sequence.filter((_, currentIndex) => currentIndex !== index);
     setSequence(nextSequence);
-    setSelected(nextSequence.at(-1) ?? null);
+    setSelected(nextSequence.at(-1)?.face ?? null);
+    if (playingRef.current && harmonyIncluded) {
+      void applyPlayback(currentSnapshot({ sequence: nextSequence }));
+    }
+  };
+
+  const handleChordDurationChange = (index: number, duration: HarmonyDuration): void => {
+    const nextSequence = sequence.map((entry, currentIndex) =>
+      currentIndex === index ? { ...entry, duration } : entry,
+    );
+    setSequence(nextSequence);
+    if (playingRef.current && harmonyIncluded) {
+      void applyPlayback(currentSnapshot({ sequence: nextSequence }));
+    }
+  };
+
+  const handleChordMuteToggle = (index: number): void => {
+    const nextSequence = sequence.map((entry, currentIndex) =>
+      currentIndex === index ? { ...entry, muted: !entry.muted } : entry,
+    );
+    setSequence(nextSequence);
     if (playingRef.current && harmonyIncluded) {
       void applyPlayback(currentSnapshot({ sequence: nextSequence }));
     }
@@ -458,6 +486,8 @@ export default function Page() {
                           isPlaying={transport === 'playing' && harmonyIncluded}
                           labelFor={chordLabel}
                           onClear={handleClearSequence}
+                          onDurationChange={handleChordDurationChange}
+                          onMuteToggle={handleChordMuteToggle}
                           onRemove={handleRemoveChord}
                           scaleMode={selectedScale.mode}
                           scaleRootPc={selectedScale.rootPc}

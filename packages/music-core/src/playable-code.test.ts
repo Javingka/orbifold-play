@@ -29,6 +29,29 @@ describe('mobile playable Strudel codegen', () => {
     ).toContain('note("<[c3,e3,g3] [a3,c4,e4]>")');
   });
 
+  it('arranges variable chord durations without changing global tempo', () => {
+    const code = harmonyPattern([
+      { rootPc: 0, quality: 'maj', duration: 0.5 },
+      { rootPc: 9, quality: 'min', duration: 2 },
+      { rootPc: 5, quality: 'maj', duration: 1, muted: true },
+    ]);
+    expect(code).toContain('[0.5, note("c3,e3,g3")');
+    expect(code).toContain('.slow(0.5)');
+    expect(code).toContain('[2, note("a3,c4,e4")');
+    expect(code).toContain('.slow(2)');
+    expect(code).toContain('[1, silence]');
+    expect(code).not.toContain('.fast');
+  });
+
+  it('returns silence when every timed chord is muted', () => {
+    expect(
+      harmonyPattern([
+        { rootPc: 0, quality: 'maj', duration: 2, muted: true },
+        { rootPc: 9, quality: 'min', duration: 0.5, muted: true },
+      ]),
+    ).toBe('silence');
+  });
+
   it('stacks harmony and rhythm and returns silence for an empty snapshot', () => {
     expect(buildPlayablePattern({})).toBe('silence');
     expect(
