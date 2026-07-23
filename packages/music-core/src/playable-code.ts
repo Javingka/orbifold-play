@@ -3,6 +3,7 @@
 // rhythmLayerToStrudelLine() engines.
 
 import type { TonnetzQuality } from './finite-tonnetz';
+import type { HarmonyDuration } from './harmony-duration';
 import {
   getRhythmSoundOption,
   type RhythmOrbitRole,
@@ -18,6 +19,8 @@ const INTERVALS: Record<TonnetzQuality, readonly [number, number, number]> = {
 };
 
 export interface PlayableChord {
+  duration?: HarmonyDuration;
+  muted?: boolean;
   rootPc: number;
   quality: TonnetzQuality;
 }
@@ -53,9 +56,20 @@ export function chordPattern(chord: PlayableChord): string {
 
 export function harmonyPattern(chords: readonly PlayableChord[]): string {
   if (chords.length === 0) return 'silence';
-  if (chords.length === 1) return chordPattern(chords[0] as PlayableChord);
-  const progression = chords.map((chord) => `[${chordVoicing(chord).join(',')}]`).join(' ');
-  return `note("<${progression}>")${HARMONY_CHAIN}`;
+  const usesDefaultTiming = chords.every((chord) => (chord.duration ?? 1) === 1 && !chord.muted);
+  if (usesDefaultTiming && chords.length === 1) return chordPattern(chords[0] as PlayableChord);
+  if (usesDefaultTiming) {
+    const progression = chords.map((chord) => `[${chordVoicing(chord).join(',')}]`).join(' ');
+    return `note("<${progression}>")${HARMONY_CHAIN}`;
+  }
+
+  const segments = chords.map((chord) => {
+    const duration = chord.duration ?? 1;
+    const pattern = chord.muted ? 'silence' : `${chordPattern(chord)}.slow(${duration})`;
+    return `  [${duration}, ${pattern}]`;
+  });
+  if (chords.every((chord) => chord.muted)) return 'silence';
+  return `arrange(\n${segments.join(',\n')}\n)`;
 }
 
 function velocityPattern(steps: readonly number[]): string {
