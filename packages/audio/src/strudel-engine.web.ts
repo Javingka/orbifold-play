@@ -262,6 +262,14 @@ export function stopStrudel(): void {
   playing = false;
 }
 
+/** Pause preserves the currently scheduled pattern; playStrudel() resumes it
+ * on the next explicit Listen press or a tempo/pattern edit. */
+export function pauseStrudel(): void {
+  (scheduler as (Cyclist & { pause?: () => void }) | null)?.pause?.();
+  stopPreviewSources();
+  playing = false;
+}
+
 export function strudelIsPlaying(): boolean {
   return playing;
 }

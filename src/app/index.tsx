@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { SkiaReady } from '@/components/async-skia';
 import { MorphLoader } from '@/components/morph-loader';
 import { ParallaxCarousel } from '@/components/parallax-carousel';
+import { RhythmCaptureDialog } from '@/components/rhythm-capture-dialog';
 import { RhythmSoundDialog } from '@/components/rhythm-sound-dialog';
 import type { ScaleCarouselOption } from '@/components/scale-blur-carousel';
 import { ScaleDialog } from '@/components/scale-dialog';
@@ -17,6 +18,7 @@ import type { RhythmOrbitLayer } from '@/components/rhythm-orbits';
 import {
   getStrudelCycle,
   getStrudelPhase,
+  pauseStrudel,
   playStrudel,
   prepareStrudelAudio,
   previewRhythmSound,
@@ -33,6 +35,7 @@ import {
   buildPlayablePattern,
   type PlayableRhythmLayer,
 } from '@/packages/music-core/src/playable-code';
+import type { RhythmCaptureAnalysis } from '@/packages/music-core/src/rhythm-capture';
 import { getRhythmSoundOption, type RhythmSoundId } from '@/packages/music-core/src/rhythm-sounds';
 
 const TonnetzArtifact = React.lazy(async () => {
@@ -53,7 +56,7 @@ const RhythmOrbits = React.lazy(async () => {
 });
 
 const NOTE_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'] as const;
-const BPM = 120;
+const INITIAL_BPM = 120;
 const MAX_SEQUENCE_LENGTH = 16;
 const SCALE_OPTIONS: readonly ScaleCarouselOption[] = [
   { id: 'c-major', rootPc: 0, mode: 'major', title: 'C MAJOR', subtitle: 'IONIAN' },
@@ -132,6 +135,8 @@ export default function Page() {
   );
   const [scaleDialogOpen, setScaleDialogOpen] = useState(false);
   const [rhythmSoundDialogOpen, setRhythmSoundDialogOpen] = useState(false);
+  const [rhythmCaptureDialogOpen, setRhythmCaptureDialogOpen] = useState(false);
+  const [bpm, setBpm] = useState(INITIAL_BPM);
   const [transport, setTransport] = useState<TransportState>('idle');
   const [audioError, setAudioError] = useState<string | null>(null);
   const playbackRequest = useRef(0);
@@ -185,7 +190,7 @@ export default function Page() {
       const wasPlaying = playingRef.current;
       setAudioError(null);
       if (!wasPlaying) setTransport('loading');
-      const result = await playStrudel(code, BPM);
+      const result = await playStrudel(code, bpm);
       if (request !== playbackRequest.current) return;
 
       if (result.ok) {
@@ -198,7 +203,7 @@ export default function Page() {
         setTransport('error');
       }
     },
-    [stopPlayback],
+    [bpm, stopPlayback],
   );
 
   const currentSnapshot = useCallback(
@@ -309,6 +314,7 @@ export default function Page() {
     setView(nextView);
     setScaleDialogOpen(false);
     setRhythmSoundDialogOpen(false);
+    setRhythmCaptureDialogOpen(false);
     void Haptics.selectionAsync();
   }, []);
 
@@ -338,6 +344,53 @@ export default function Page() {
     if (!layer) return;
     void previewRhythmSound(soundId, layer.role);
   };
+
+  const capturedLayers = useCallback(
+    (analysis: RhythmCaptureAnalysis): readonly AppRhythmLayer[] =>
+      rhythmLayers.map((layer) => ({
+        ...layer,
+        steps: analysis.appliedPattern[layer.role],
+      })),
+    [rhythmLayers],
+  );
+
+  const handleRhythmCapturePreview = useCallback(
+    (analysis: RhythmCaptureAnalysis): void => {
+      const layers = capturedLayers(analysis);
+      const code = buildPlayablePattern({
+        rhythmLayers: layers.map((layer) => ({
+          steps: layer.steps,
+          soundId: layer.soundId,
+          role: layer.role,
+          audioOrbit: layer.audioOrbit,
+        })),
+      });
+      void playStrudel(code, Math.round(analysis.bpm));
+    },
+    [capturedLayers],
+  );
+
+  const handleRhythmCapturePreviewStop = useCallback((): void => {
+    stopStrudel();
+    playingRef.current = false;
+    setTransport('idle');
+  }, []);
+
+  const handleRhythmCapturePreviewPause = useCallback((): void => {
+    pauseStrudel();
+    playingRef.current = false;
+    setTransport('idle');
+  }, []);
+
+  const handleRhythmCaptureApply = useCallback(
+    (analysis: RhythmCaptureAnalysis, applyTempo: boolean): void => {
+      const nextLayers = capturedLayers(analysis);
+      setRhythmLayers(nextLayers);
+      if (applyTempo) setBpm(Math.round(analysis.bpm));
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    [capturedLayers],
+  );
 
   const selectedLabel = selected ? chordLabel(selected) : 'Build a sequence';
   const rhythmLabel = rhythmLayers
@@ -428,6 +481,29 @@ export default function Page() {
             </View>
           )}
         </Pressable>
+        {view === 'rhythm' ? (
+          <Pressable
+            accessibilityLabel="Capture a rhythm with the microphone"
+            accessibilityRole="button"
+            accessibilityState={{ expanded: rhythmCaptureDialogOpen }}
+            hitSlop={6}
+            onPress={() => {
+              stopPlayback();
+              setRhythmSoundDialogOpen(false);
+              setRhythmCaptureDialogOpen(true);
+              void Haptics.selectionAsync();
+            }}
+            style={[
+              styles.contextMenuButton,
+              rhythmCaptureDialogOpen && styles.contextMenuButtonActive,
+            ]}
+          >
+            <View style={styles.micIcon}>
+              <View style={styles.micCapsule} />
+              <View style={styles.micStem} />
+            </View>
+          </Pressable>
+        ) : null}
         <View
           style={[
             styles.transportDot,
@@ -530,7 +606,7 @@ export default function Page() {
                       <View style={styles.readout}>
                         <Text style={styles.readoutValue}>{rhythmLabel}</Text>
                         <Text style={styles.readoutHint}>
-                          ← SWIPE FOR HARMONY · {BPM} BPM · TOUCH THE ORBITS
+                          ← SWIPE FOR HARMONY · {bpm} BPM · TOUCH THE ORBITS
                         </Text>
                       </View>
                       <ViewModeIndicator active="rhythm" />
@@ -575,6 +651,14 @@ export default function Page() {
           </StackedChips.Content>
         </StackedChips>
       </View>
+      <RhythmCaptureDialog
+        onApply={handleRhythmCaptureApply}
+        onClose={() => setRhythmCaptureDialogOpen(false)}
+        onPausePreview={handleRhythmCapturePreviewPause}
+        onPreview={handleRhythmCapturePreview}
+        onStopPreview={handleRhythmCapturePreviewStop}
+        visible={rhythmCaptureDialogOpen}
+      />
     </SafeAreaView>
   );
 }
@@ -670,6 +754,25 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     backgroundColor: '#E87BAC',
+  },
+  micIcon: { width: 13, height: 15, alignItems: 'center' },
+  micCapsule: {
+    width: 7,
+    height: 10,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#AAB5CE',
+  },
+  micStem: {
+    width: 9,
+    height: 4,
+    marginTop: -2,
+    borderBottomWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: '#AAB5CE',
+    borderBottomLeftRadius: 5,
+    borderBottomRightRadius: 5,
   },
   carouselArea: { flex: 1, minHeight: 316 },
   instrumentPage: { flex: 1 },

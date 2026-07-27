@@ -21,6 +21,8 @@ export async function previewRhythmSound(
 
 export function stopStrudel(): void {}
 
+export function pauseStrudel(): void {}
+
 export function strudelIsPlaying(): boolean {
   return false;
 }
