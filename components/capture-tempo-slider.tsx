@@ -60,7 +60,7 @@ export function CaptureTempoSlider({
         onPanResponderGrant: (event) => updateFromPosition(event.nativeEvent.locationX),
         onPanResponderMove: (event) => updateFromPosition(event.nativeEvent.locationX),
       }),
-    [width, minimum, maximum, detectedBpm, anchors],
+    [width, minimum, maximum, detectedBpm, anchors, onValueChange],
   );
 
   const onLayout = (event: LayoutChangeEvent): void => setWidth(event.nativeEvent.layout.width);

@@ -13,8 +13,10 @@ current rhythm.
   union of both bars into the current 16-step orbit view.
 - Applying a capture replaces all three current rhythm orbits only after an
   explicit confirmation.
-- Show detected BPM with `Use N BPM` enabled by default. Provide half/double
-  correction and only update the app tempo while that choice remains enabled.
+- Show the detected BPM as a reference on a touch-first slider. The slider
+  snaps to integer BPM values and familiar musical tempo anchors; edits retime
+  an active preview immediately. Applying that BPM to Orbifold remains enabled
+  by default and can be switched off independently.
 
 ## Implementation
 
@@ -24,12 +26,14 @@ current rhythm.
 - Keep tempo/pattern analysis pure and cover it with deterministic tests.
 - Isolate microphone and Web Audio behavior in a web adapter; native builds show
   an explicit unsupported message until a native audio adapter exists.
-- Add a stage-local, mobile-first capture dialog beside the rhythm sound control.
+- Add a full-screen, mobile-first capture dialog opened beside the rhythm sound
+  control, so the capture editor does not clip the instrument surface.
 - Calibrate room noise for two seconds, use a neutral three-second countdown,
   capture ten seconds, and classify low/mid/air hits into pulse/click/air.
 - Stop existing playback before recording so speaker output cannot contaminate
   microphone analysis.
-- Allow result audition without mutating the current rhythm.
+- Allow result audition without mutating the current rhythm; the central
+  play/pause control retimes the audible preview live as the BPM slider moves.
 
 ## Validation
 
@@ -40,6 +44,8 @@ pnpm typecheck
 pnpm build:web
 ```
 
-Visually verify the intro and result surfaces at 320×568 and 390×844. Real
-microphone quality and perceived classification still require manual tests on
-mobile Safari and Chrome before merge or push.
+Validated in a mobile browser: microphone capture, repeat recording, editable
+step grid, play/pause audition, BPM adjustment during active playback, and
+explicit rhythm replacement. The secure test URL requires HTTPS; native builds
+continue to display the intentional unsupported message until a native audio
+adapter is introduced.

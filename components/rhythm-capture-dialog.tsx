@@ -69,11 +69,15 @@ export function RhythmCaptureDialog({
   const [previewPlaying, setPreviewPlaying] = useState(false);
   const [detectedBpm, setDetectedBpm] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Gesture responders can outlive a render. Keep audition state in a ref so
+  // moving the BPM slider always retimes an already-playing preview.
+  const previewPlayingRef = useRef(false);
 
   useEffect(() => {
     if (!visible) {
       abortRef.current?.abort();
       onStopPreview();
+      previewPlayingRef.current = false;
       setPreviewPlaying(false);
       setState('intro');
       setAnalysis(null);
@@ -89,6 +93,7 @@ export function RhythmCaptureDialog({
     abortRef.current = controller;
     setError('');
     setAnalysis(null);
+    previewPlayingRef.current = false;
     setPreviewPlaying(false);
     try {
       const result = await captureRhythm({
@@ -121,6 +126,7 @@ export function RhythmCaptureDialog({
   const close = (): void => {
     abortRef.current?.abort();
     onStopPreview();
+    previewPlayingRef.current = false;
     setPreviewPlaying(false);
     onClose();
   };
@@ -129,7 +135,7 @@ export function RhythmCaptureDialog({
     setAnalysis((current) => {
       if (!current) return current;
       const next = setCaptureTempo(current, targetBpm);
-      if (previewPlaying) onPreview(next);
+      if (previewPlayingRef.current) onPreview(next);
       return next;
     });
   };
@@ -138,10 +144,12 @@ export function RhythmCaptureDialog({
     if (!analysis) return;
     if (previewPlaying) {
       onPausePreview();
+      previewPlayingRef.current = false;
       setPreviewPlaying(false);
       return;
     }
     onPreview(analysis);
+    previewPlayingRef.current = true;
     setPreviewPlaying(true);
   };
 
@@ -149,7 +157,7 @@ export function RhythmCaptureDialog({
     setAnalysis((current) => {
       if (!current) return current;
       const next = setCapturedStep(current, lane, step, current.appliedPattern[lane][step] !== 1);
-      if (previewPlaying) onPreview(next);
+      if (previewPlayingRef.current) onPreview(next);
       return next;
     });
   };
@@ -370,11 +378,12 @@ export function RhythmCaptureDialog({
                   <Pressable
                     accessibilityLabel="Record this rhythm again"
                     accessibilityRole="button"
-                    onPress={() => {
-                      onStopPreview();
-                      setPreviewPlaying(false);
-                      setState('intro');
-                    }}
+                      onPress={() => {
+                        onStopPreview();
+                        previewPlayingRef.current = false;
+                        setPreviewPlaying(false);
+                        setState('intro');
+                      }}
                     style={styles.recordAgain}
                   >
                     <Text style={styles.secondaryText}>↻ RECORD AGAIN</Text>
