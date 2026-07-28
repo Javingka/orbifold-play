@@ -6,6 +6,7 @@ import {
   estimateYinPitch,
   estimateHarmonyTempo,
   extractHarmonyPitchFrames,
+  extractPyinCapture,
   inferHarmonyKey,
   removeHarmonyCaptureEntry,
   segmentPitchFrames,
@@ -55,6 +56,64 @@ function repeatedWhistle(sampleRate = 16_000): Float32Array {
   }
   return Float32Array.from(values);
 }
+
+/**
+ * Sung-like fixture (ADR 0031 / B-03): a C3–F3–G3–C3 root phrase with rich
+ * harmonics, ±30-cent vibrato, deterministic noise, and short breaths,
+ * repeated three times at ~100 BPM.
+ */
+function sungProgression(sampleRate = 24_000): Float32Array {
+  let noiseState = 5 >>> 0;
+  const noise = (): number => {
+    noiseState = (noiseState * 1_664_525 + 1_013_904_223) >>> 0;
+    return noiseState / 0xffffffff - 0.5;
+  };
+  const values: number[] = [];
+  const roots = [130.81, 174.61, 196, 130.81];
+  for (let repetition = 0; repetition < 3; repetition += 1) {
+    for (const hz of roots) {
+      const length = Math.round(0.5 * sampleRate);
+      let phase = 0;
+      for (let index = 0; index < length; index += 1) {
+        const t = index / sampleRate;
+        const vibrato = 2 ** ((0.3 / 12) * Math.sin(2 * Math.PI * 5.5 * t));
+        phase += (2 * Math.PI * hz * vibrato) / sampleRate;
+        const sample =
+          Math.sin(phase) +
+          0.6 * Math.sin(2 * phase) +
+          0.4 * Math.sin(3 * phase) +
+          0.25 * Math.sin(4 * phase);
+        values.push(0.35 * sample + 0.05 * noise());
+      }
+      const breath = Math.round(0.1 * sampleRate);
+      for (let index = 0; index < breath; index += 1) values.push(0.004 * noise());
+    }
+  }
+  return Float32Array.from(values);
+}
+
+describe('pYIN capture pipeline (ADR 0031, B-03)', () => {
+  it('resolves a noisy repeated sung phrase to the intended progression end-to-end', () => {
+    const { frames, notes } = extractPyinCapture(sungProgression(), 24_000, {
+      rmsThreshold: 0.01,
+    });
+    expect(notes.length).toBeGreaterThanOrEqual(12);
+    expect(
+      new Set(notes.map((note) => ((note.midi % 12) + 12) % 12)),
+    ).toEqual(new Set([0, 5, 7]));
+    const analysis = analyzeHarmonyCapture(notes, { frames });
+    expect(analysis).not.toBeNull();
+    expect(analysis?.entries.map((entry) => entry.face.rootPc)).toEqual([0, 5, 7, 0]);
+    expect(analysis?.bpm ?? 0).toBeGreaterThan(80);
+    expect(analysis?.bpm ?? 0).toBeLessThan(125);
+  });
+
+  it('reports too little material for silence through the pYIN pipeline', () => {
+    const silence = new Float32Array(24_000 * 3);
+    const { notes } = extractPyinCapture(silence, 24_000);
+    expect(notes.length).toBeLessThan(3);
+  });
+});
 
 describe('pure harmony capture (melody-lab parity and ADR 0030)', () => {
   it('estimates monophonic f0 with the prototype YIN contract', () => {
