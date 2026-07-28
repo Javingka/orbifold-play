@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
 // Adapted from ReactICX Stacked Chips by rit3zh (2026).
-import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { Children, createContext, type ReactNode, useContext, useState } from 'react';
 import { type LayoutChangeEvent, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
@@ -51,7 +50,7 @@ function Trigger({ children, onPress }: TriggerProps) {
   const context = useContext(ChipContext);
   if (!context) throw new Error('StackedChips.Trigger must be inside StackedChips');
 
-  const { toggle, setTriggerWidth, depth, parentIsOpen } = context;
+  const { toggle, setTriggerWidth, depth } = context;
   const handleLayout = (event: LayoutChangeEvent): void => {
     setTriggerWidth(event.nativeEvent.layout.width);
   };
@@ -69,16 +68,7 @@ function Trigger({ children, onPress }: TriggerProps) {
       onLayout={handleLayout}
       style={{ zIndex: 100 - depth }}
     >
-      <View>
-        {children}
-        {depth > 0 ? (
-          <BlurView
-            pointerEvents="none"
-            intensity={parentIsOpen ? 4 : 0}
-            style={[StyleSheet.absoluteFill, styles.blur]}
-          />
-        ) : null}
-      </View>
+      <View>{children}</View>
     </Pressable>
   );
 }
@@ -93,7 +83,7 @@ function Content({ children }: ChildrenProps) {
     () => ({
       transform: [{ translateX: withSpring(isOpen ? 0 : -contentWidth + 52) }],
       opacity: withSpring(isOpen ? 1 : 0),
-      marginLeft: withSpring(isOpen ? -42 : 0),
+      marginLeft: withSpring(isOpen ? 6 : 0),
     }),
     [contentWidth, isOpen],
   );
@@ -108,11 +98,6 @@ function Content({ children }: ChildrenProps) {
       pointerEvents={isOpen ? 'auto' : 'none'}
     >
       {Children.only(children)}
-      <BlurView
-        pointerEvents="none"
-        intensity={isOpen ? 4 : 0}
-        style={[StyleSheet.absoluteFill, styles.blur]}
-      />
     </Animated.View>
   );
 }
@@ -122,5 +107,4 @@ export const StackedChips = Object.assign(Root, { Trigger, Content });
 const styles = StyleSheet.create({
   container: { flexDirection: 'row' },
   content: { position: 'absolute' },
-  blur: { overflow: 'hidden', borderRadius: 999 },
 });

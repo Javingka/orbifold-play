@@ -15,11 +15,18 @@ import Animated, {
 interface FlexiPreviewButtonProps {
   isPlaying: boolean;
   onPress: () => void;
+  pauseAccessibilityLabel?: string;
+  playAccessibilityLabel?: string;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export function FlexiPreviewButton({ isPlaying, onPress }: FlexiPreviewButtonProps) {
+export function FlexiPreviewButton({
+  isPlaying,
+  onPress,
+  pauseAccessibilityLabel = 'Pause captured rhythm preview',
+  playAccessibilityLabel = 'Listen to captured rhythm',
+}: FlexiPreviewButtonProps) {
   const progress = useSharedValue(isPlaying ? 1 : 0);
   const reduceMotion = useReducedMotion();
 
@@ -46,7 +53,7 @@ export function FlexiPreviewButton({ isPlaying, onPress }: FlexiPreviewButtonPro
 
   return (
     <AnimatedPressable
-      accessibilityLabel={isPlaying ? 'Pause captured rhythm preview' : 'Listen to captured rhythm'}
+      accessibilityLabel={isPlaying ? pauseAccessibilityLabel : playAccessibilityLabel}
       accessibilityRole="button"
       accessibilityState={{ selected: isPlaying }}
       onPress={onPress}

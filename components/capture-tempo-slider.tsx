@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 
 interface CaptureTempoSliderProps {
+  accessibilityLabel?: string;
   detectedBpm: number;
   maximum: number;
   minimum: number;
@@ -25,6 +26,7 @@ function constrain(value: number, minimum: number, maximum: number): number {
 }
 
 export function CaptureTempoSlider({
+  accessibilityLabel = 'Captured rhythm BPM',
   detectedBpm,
   maximum,
   minimum,
@@ -75,7 +77,7 @@ export function CaptureTempoSlider({
       <View
         {...panResponder.panHandlers}
         accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
-        accessibilityLabel="Captured rhythm BPM"
+        accessibilityLabel={accessibilityLabel}
         accessibilityRole="adjustable"
         accessibilityValue={{ max: maximum, min: minimum, now: Math.round(value), text: `${Math.round(value)} BPM` }}
         onAccessibilityAction={(event) => adjust(event.nativeEvent.actionName === 'increment' ? 1 : -1)}
