@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Browser microphone adapter for the pure beatbox-lab rhythm analysis.
+// Browser microphone adapter for rhythm capture. ADR 0032: recording runs
+// through an AudioWorklet (audio-thread callbacks that UI work cannot starve)
+// with the legacy ScriptProcessor path as a fallback, and onsets are detected
+// offline from the complete recorded PCM by the pure spectral-flux engine
+// instead of a live envelope state machine.
 import {
   analyzeRhythmCapture,
   type CaptureLane,
-  type CaptureOnset,
   type RhythmCaptureAnalysis,
 } from '@/packages/music-core/src/rhythm-capture';
+import { detectOnsets } from '@/packages/music-core/src/onset-detection';
 
-export type RhythmCapturePhase = 'permission' | 'calibrating' | 'countdown' | 'recording';
+export type RhythmCapturePhase = 'permission' | 'calibrating' | 'countdown' | 'recording' | 'analyzing';
 
 export interface RhythmCaptureProgress {
   phase: RhythmCapturePhase;
@@ -23,12 +27,41 @@ export interface CaptureRhythmOptions {
   signal?: AbortSignal;
 }
 
-const FFT_SIZE = 2048;
-const BUFFER_SIZE = 512;
+const SCRIPT_BUFFER_SIZE = 512;
+const WORKLET_CHUNK_SIZE = 1_024;
 const ENV_RELEASE = 0.7;
 const FLOOR_FACTOR = 4;
-const PEAK_MARGIN = 1.25;
-const RELEASE_RATIO = 0.6;
+/** Live envelope re-arm threshold for the recording flash (feedback only). */
+const HIT_RELEASE_RATIO = 0.6;
+
+const WORKLET_PROCESSOR_NAME = 'rhythm-capture-recorder';
+const WORKLET_SOURCE = `
+class RhythmCaptureRecorder extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.buffer = new Float32Array(${WORKLET_CHUNK_SIZE});
+    this.offset = 0;
+  }
+  process(inputs) {
+    const channel = inputs[0] && inputs[0][0];
+    if (!channel) return true;
+    let index = 0;
+    while (index < channel.length) {
+      const take = Math.min(this.buffer.length - this.offset, channel.length - index);
+      this.buffer.set(channel.subarray(index, index + take), this.offset);
+      this.offset += take;
+      index += take;
+      if (this.offset === this.buffer.length) {
+        this.port.postMessage(this.buffer, [this.buffer.buffer]);
+        this.buffer = new Float32Array(${WORKLET_CHUNK_SIZE});
+        this.offset = 0;
+      }
+    }
+    return true;
+  }
+}
+registerProcessor('${WORKLET_PROCESSOR_NAME}', RhythmCaptureRecorder);
+`;
 
 function aborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new DOMException('Capture cancelled', 'AbortError');
@@ -48,6 +81,73 @@ function wait(milliseconds: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+function rmsOf(samples: Float32Array): number {
+  let squares = 0;
+  for (const sample of samples) squares += sample * sample;
+  return Math.sqrt(squares / Math.max(1, samples.length));
+}
+
+interface RecorderBackend {
+  detach: () => void;
+  kind: 'script-processor' | 'worklet';
+}
+
+async function attachWorklet(
+  context: AudioContext,
+  source: MediaStreamAudioSourceNode,
+  silent: GainNode,
+  onChunk: (chunk: Float32Array) => void,
+): Promise<RecorderBackend | null> {
+  if (typeof AudioWorkletNode !== 'function' || !context.audioWorklet) return null;
+  const moduleUrl = URL.createObjectURL(new Blob([WORKLET_SOURCE], { type: 'application/javascript' }));
+  try {
+    await context.audioWorklet.addModule(moduleUrl);
+  } catch {
+    return null;
+  } finally {
+    URL.revokeObjectURL(moduleUrl);
+  }
+  const node = new AudioWorkletNode(context, WORKLET_PROCESSOR_NAME, {
+    channelCount: 1,
+    numberOfInputs: 1,
+    numberOfOutputs: 1,
+  });
+  node.port.onmessage = (event: MessageEvent): void => {
+    if (event.data instanceof Float32Array) onChunk(event.data);
+  };
+  source.connect(node);
+  node.connect(silent);
+  return {
+    detach: (): void => {
+      node.port.onmessage = null;
+      node.port.close();
+      node.disconnect();
+    },
+    kind: 'worklet',
+  };
+}
+
+function attachScriptProcessor(
+  context: AudioContext,
+  source: MediaStreamAudioSourceNode,
+  silent: GainNode,
+  onChunk: (chunk: Float32Array) => void,
+): RecorderBackend {
+  const processor = context.createScriptProcessor(SCRIPT_BUFFER_SIZE, 1, 1);
+  processor.onaudioprocess = (event): void => {
+    onChunk(new Float32Array(event.inputBuffer.getChannelData(0)));
+  };
+  source.connect(processor);
+  processor.connect(silent);
+  return {
+    detach: (): void => {
+      processor.onaudioprocess = null;
+      processor.disconnect();
+    },
+    kind: 'script-processor',
+  };
+}
+
 export async function captureRhythm(
   options: CaptureRhythmOptions = {},
 ): Promise<RhythmCaptureAnalysis> {
@@ -62,67 +162,43 @@ export async function captureRhythm(
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: { autoGainControl: false, echoCancellation: false, noiseSuppression: false },
   });
-  const context = new AudioContext();
-  const source = context.createMediaStreamSource(stream);
-  const analyser = context.createAnalyser();
-  analyser.fftSize = FFT_SIZE;
-  analyser.smoothingTimeConstant = 0;
-  const processor = context.createScriptProcessor(BUFFER_SIZE, 1, 1);
-  const silent = context.createGain();
+  let context: AudioContext;
+  try {
+    context = new AudioContext();
+  } catch (error) {
+    stream.getTracks().forEach((track) => track.stop());
+    throw error;
+  }
+  let source: MediaStreamAudioSourceNode;
+  let silent: GainNode;
+  try {
+    source = context.createMediaStreamSource(stream);
+    silent = context.createGain();
+  } catch (error) {
+    stream.getTracks().forEach((track) => track.stop());
+    await context.close();
+    throw error;
+  }
   silent.gain.value = 0;
-  source.connect(analyser);
-  source.connect(processor);
-  processor.connect(silent);
   silent.connect(context.destination);
 
-  const frequency = new Uint8Array(analyser.frequencyBinCount);
-  const waveform = new Float32Array(FFT_SIZE);
+  type CaptureMode = 'calibrating' | 'idle' | 'recording';
+  let mode: CaptureMode = 'calibrating';
   const ambient: number[] = [];
-  const onsets: CaptureOnset[] = [];
+  const recordedChunks: Float32Array[] = [];
+  let threshold = 0.015;
+  // Live envelope for the recording flash only; the real onsets are found
+  // offline. `flashArmed` gates one flash per audible attack.
   let envelope = 0;
-  let previousEnvelope = 0;
   let noiseFloor = 0.004;
   let noiseDeviation = 0.0008;
-  let threshold = 0.015;
-  let captureStart = Number.POSITIVE_INFINITY;
-  let captureEnd = Number.NEGATIVE_INFINITY;
-  let state: 'idle' | 'rising' | 'refractory' = 'idle';
-  let peak = 0;
-  let valley = Number.POSITIVE_INFINITY;
-  let attackTime = 0;
-  let lastEmit = Number.NEGATIVE_INFINITY;
-  let fallingFrames = 0;
-  let peakFeatures = { centroid: 0, zcr: 0 };
+  let flashArmed = true;
 
-  const features = (): { centroid: number; zcr: number } => {
-    analyser.getByteFrequencyData(frequency);
-    analyser.getFloatTimeDomainData(waveform);
-    const binHz = context.sampleRate / FFT_SIZE;
-    let numerator = 0;
-    let denominator = 0;
-    for (let index = 1; index < frequency.length; index += 1) {
-      const magnitude = frequency[index] ?? 0;
-      numerator += magnitude * index * binHz;
-      denominator += magnitude;
-    }
-    let crossings = 0;
-    for (let index = 1; index < waveform.length; index += 1) {
-      if ((waveform[index - 1] ?? 0) < 0 !== (waveform[index] ?? 0) < 0) crossings += 1;
-    }
-    return {
-      centroid: denominator > 0 ? numerator / denominator : 0,
-      zcr: crossings / waveform.length,
-    };
-  };
-
-  processor.onaudioprocess = (event): void => {
-    const buffer = event.inputBuffer.getChannelData(0);
-    let squares = 0;
-    for (const sample of buffer) squares += sample * sample;
-    const rms = Math.sqrt(squares / buffer.length);
-    const time = context.currentTime;
+  const onChunk = (chunk: Float32Array): void => {
+    const rms = rmsOf(chunk);
+    if (mode === 'calibrating') ambient.push(rms);
+    if (mode === 'recording') recordedChunks.push(chunk);
     envelope = rms > envelope ? rms : ENV_RELEASE * envelope + (1 - ENV_RELEASE) * rms;
-    if (captureStart === Number.POSITIVE_INFINITY) ambient.push(rms);
     if (envelope < noiseFloor) noiseFloor = 0.9 * noiseFloor + 0.1 * envelope;
     else noiseFloor *= 1.0006;
     if (envelope < noiseFloor * 2.2) {
@@ -130,60 +206,28 @@ export async function captureRhythm(
     }
     const effectiveThreshold = Math.max(threshold, noiseFloor + FLOOR_FACTOR * noiseDeviation);
     options.onLevel?.(envelope, effectiveThreshold);
-
-    if (time >= captureStart && time < captureEnd) {
-      if (state === 'idle') {
-        valley = Math.min(valley, envelope);
-        if (envelope > effectiveThreshold && envelope > previousEnvelope) {
-          state = 'rising';
-          attackTime = time;
-          peak = envelope;
-          fallingFrames = 0;
-          peakFeatures = features();
-        }
-      } else if (state === 'rising') {
-        if (envelope >= peak) {
-          peak = envelope;
-          fallingFrames = 0;
-          peakFeatures = features();
-        } else if (envelope < peak * 0.7) {
-          fallingFrames += 1;
-        } else {
-          fallingFrames = 0;
-        }
-        if (fallingFrames >= 2 || time - attackTime > 0.25) {
-          const prominence = peak - (valley === Number.POSITIVE_INFINITY ? noiseFloor : valley);
-          if (
-            peak >= effectiveThreshold * PEAK_MARGIN &&
-            prominence >= 3 * noiseDeviation &&
-            attackTime - lastEmit > 0.09
-          ) {
-            const lane: CaptureLane =
-              peakFeatures.centroid < 1300 && peakFeatures.zcr < 0.15
-                ? 'pulse'
-                : peakFeatures.centroid > 4600 || peakFeatures.zcr > 0.35
-                  ? 'air'
-                  : 'click';
-            onsets.push({ lane, peak, time: attackTime });
-            options.onHit?.(lane);
-            lastEmit = attackTime;
-            state = 'refractory';
-          } else {
-            state = 'idle';
-            valley = peak;
-          }
-        }
-      } else if (
-        envelope < effectiveThreshold * RELEASE_RATIO ||
-        envelope < peak * 0.35 ||
-        time - attackTime > 0.4
-      ) {
-        state = 'idle';
-        valley = envelope;
+    if (mode === 'recording') {
+      if (flashArmed && envelope > effectiveThreshold) {
+        flashArmed = false;
+        options.onHit?.('pulse');
+      } else if (!flashArmed && envelope < effectiveThreshold * HIT_RELEASE_RATIO) {
+        flashArmed = true;
       }
     }
-    previousEnvelope = envelope;
   };
+
+  let backend: RecorderBackend;
+  try {
+    backend =
+      (await attachWorklet(context, source, silent, onChunk)) ??
+      attachScriptProcessor(context, source, silent, onChunk);
+  } catch (error) {
+    silent.disconnect();
+    source.disconnect();
+    stream.getTracks().forEach((track) => track.stop());
+    await context.close();
+    throw error;
+  }
 
   try {
     await context.resume();
@@ -206,12 +250,12 @@ export async function captureRhythm(
     }
 
     const captureSeconds = options.captureSeconds ?? 10;
-    captureStart = context.currentTime;
-    captureEnd = captureStart + captureSeconds;
+    mode = 'recording';
     const startedAt = performance.now();
-    while (context.currentTime < captureEnd) {
+    let elapsed = 0;
+    while (elapsed < captureSeconds) {
       aborted(options.signal);
-      const elapsed = (performance.now() - startedAt) / 1000;
+      elapsed = (performance.now() - startedAt) / 1000;
       options.onProgress?.({
         phase: 'recording',
         progress: Math.min(1, elapsed / captureSeconds),
@@ -219,17 +263,28 @@ export async function captureRhythm(
       });
       await wait(100, options.signal);
     }
-    const analysis = analyzeRhythmCapture(
-      onsets,
-      captureStart,
-      captureSeconds,
-      BUFFER_SIZE / context.sampleRate,
-    );
+    mode = 'idle';
+
+    options.onProgress?.({ phase: 'analyzing', progress: 1, secondsLeft: 0 });
+    const sampleCount = recordedChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+    const samples = new Float32Array(sampleCount);
+    let sampleOffset = 0;
+    for (const chunk of recordedChunks) {
+      samples.set(chunk, sampleOffset);
+      sampleOffset += chunk.length;
+    }
+    const onsets = detectOnsets(samples, context.sampleRate, {
+      rmsFloor: Math.max(0.005, threshold * 0.6),
+    });
+    // Tempo-analysis novelty resolution (~5.8 ms); onset times are already
+    // sample-accurate from the offline detector.
+    const analysis = analyzeRhythmCapture(onsets, 0, captureSeconds, 256 / context.sampleRate);
     if (!analysis) throw new Error('TOO_FEW_HITS');
     return analysis;
   } finally {
-    processor.disconnect();
+    backend.detach();
     source.disconnect();
+    silent.disconnect();
     stream.getTracks().forEach((track) => track.stop());
     await context.close();
   }

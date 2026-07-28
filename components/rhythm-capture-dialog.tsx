@@ -166,7 +166,8 @@ export function RhythmCaptureDialog({
     state === 'permission' ||
     state === 'calibrating' ||
     state === 'countdown' ||
-    state === 'recording';
+    state === 'recording' ||
+    state === 'analyzing';
   const meterWidth = `${Math.min(100, (level / Math.max(0.001, threshold * 2)) * 100)}%` as const;
   const tempoRange = (() => {
     const base = detectedBpm ?? analysis?.bpm ?? 120;
@@ -238,7 +239,9 @@ export function RhythmCaptureDialog({
                 ? 'STAY QUIET · CALIBRATING'
                 : state === 'countdown'
                   ? `GET READY · ${progress?.secondsLeft.toFixed(0) ?? 3}`
-                  : `RECORDING · ${Math.ceil(progress?.secondsLeft ?? 10)}S`}
+                  : state === 'analyzing'
+                    ? 'ANALYZING · BUILDING PATTERN'
+                    : `RECORDING · ${Math.ceil(progress?.secondsLeft ?? 10)}S`}
           </Text>
           <View style={styles.meter}>
             <View style={[styles.meterFill, { width: meterWidth }]} />
