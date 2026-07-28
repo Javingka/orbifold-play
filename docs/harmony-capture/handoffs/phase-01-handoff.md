@@ -3,8 +3,8 @@
 ## Step 01.2 — Pure monophonic capture analysis and editable result model
 
 **Date:** 2026-07-27  
-**Status:** Implementation complete; reviewable uncommitted work because the
-Pilot has not authorized commit/stage operations.
+**Status:** Implemented and merged into `main`; pure-analysis evidence is
+complete.
 
 ### What changed
 
@@ -40,8 +40,7 @@ Pilot has not authorized commit/stage operations.
 - `pnpm exec vitest run packages/music-core/src/harmony-capture.test.ts`
   → 1 file passed, 9 tests passed.
 - `pnpm typecheck` → passed.
-- No dependency, platform, UI, persistence, build, desktop-repository, stage,
-  commit, push, PR, or merge operation occurred.
+- No dependency, persistence, upload, or desktop-repository operation occurred.
 
 ### Acceptance Coverage
 
@@ -52,17 +51,17 @@ Pilot has not authorized commit/stage operations.
 | A-04 | Root, quality, duration, removal, and BPM edits return a new candidate suitable for active-preview rebuilding | `packages/music-core/src/harmony-capture.test.ts` | unit | partial — UI active-preview wiring is step 01.4 |
 | A-10 | Existing behavior remains unchanged when capture is inactive | targeted test + `pnpm typecheck` | integration | partial — full `pnpm test` runs in steps 01.4–01.5 |
 
-### Pending review constraint
+### Review result
 
-The methodology's commit-message and committed-diff checklist items cannot be
-evaluated until the Pilot explicitly authorizes a commit. Source scope,
-acceptance mapping, targeted tests, prototype citations, no-dependency rule,
-and pure-module boundaries are available for review now.
+Source scope, acceptance mapping, targeted tests, prototype citations,
+no-dependency rule, pure-module boundaries, commit, and merge review were
+completed in the final phase review.
 
 ## Step 01.3 — Web microphone acquisition and native limitation
 
 **Date:** 2026-07-27  
-**Status:** Implementation complete as uncommitted work.
+**Status:** Implemented and merged into `main`; adapter evidence is complete
+except for real-device microphone permission testing.
 
 ### What changed
 
@@ -93,7 +92,8 @@ and pure-module boundaries are available for review now.
 ## Step 01.4 — Mobile review, preview, and explicit replacement
 
 **Date:** 2026-07-27  
-**Status:** Implementation complete as uncommitted work.
+**Status:** Implemented and merged into `main`; local web and responsive UI
+evidence is complete.
 
 ### What changed
 
@@ -145,18 +145,17 @@ and pure-module boundaries are available for review now.
 ## Step 01.5 — HTTPS mobile operability and phase evidence
 
 **Date:** 2026-07-27  
-**Status:** Partially validated; physical-device HTTPS capture remains an
-explicit pre-merge gate.
+**Status:** Phase implementation merged into `main`; physical-device HTTPS
+capture remains an explicit manual follow-up for operability evidence.
 
 ### Evidence completed
 
 - Repeated the required repository preflight in
-  `/Users/virtualmachine/Development/personal/orbifold-play` on
-  `harmony-capture/phase-01`.
+  `/Users/virtualmachine/Development/personal/orbifold-play` on `main`.
 - Ran the complete quality suite successfully:
   - `pnpm typecheck`
   - `pnpm lint`
-  - `pnpm test` (51/51)
+  - `pnpm test` (53/53)
   - `pnpm build:web`
 - Served the Expo web application locally and inspected effective 320×568 and
   390×844 browser viewports.
@@ -167,18 +166,33 @@ explicit pre-merge gate.
 - The temporary Expo server modified `tsconfig.json` formatting automatically;
   that known generated change was restored, and `tsconfig.json` has no diff.
 
-### Remaining pre-merge gate
+### Remaining manual follow-up
 
 No physical phone and externally reachable HTTPS origin were attached to this
 Codex session. Therefore this handoff does **not** claim A-11 or the real-audio
-parts of A-01/A-04/A-05/A-06/A-07/A-08. Before merge review, open a secure Expo
-web URL on a phone and exercise permission grant/denial, room calibration,
-countdown, successful and insufficient capture, populated-result scrolling,
-edits during preview, Pause, record again, cancel, confirmed replacement, and
-microphone/preview cleanup.
+parts of A-01/A-04/A-05/A-06/A-07/A-08. A future manual QA pass should open a
+secure Expo web URL on a phone and exercise permission grant/denial, room
+calibration, countdown, successful and insufficient capture, populated-result
+scrolling, edits during preview, Pause, record again, cancel, confirmed
+replacement, and microphone/preview cleanup.
 
-### Source-control constraint
+### Source-control result
 
-No stage, commit, push, PR, merge, dependency addition, persistence, upload, or
-desktop-repository operation occurred. Commit review remains pending explicit
-Pilot authorization.
+The Pilot authorized closure. The implementation was committed as
+`a338324` and merged into `main` as `624c5a7`; `main` was pushed to
+`origin/main`. No force-push, PR, dependency addition, persistence, upload, or
+desktop-repository operation occurred.
+
+## Phase completion addendum — 2026-07-28
+
+- Final repository validation passed: `pnpm typecheck`, `pnpm lint`, `pnpm
+  test` (12 files, 53 tests), and `pnpm build:web`.
+- The final transport polish was included: empty harmony/rhythm selections
+  report `NO SOUNDS AVAILABLE · ADD NOTES OR ACTIVE RHYTHM` and do not start
+  playback.
+- The final piano-roll interaction was included: selecting another column
+  updates the existing Bottom Sheet, while tapping outside the columns closes
+  it without blocking the grid.
+- The working tree is clean and `main` is synchronized with `origin/main`.
+- A-11 remains a manual device-operability follow-up, not an implementation
+  blocker for the merged phase.
