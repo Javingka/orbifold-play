@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-na
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SkiaReady } from '@/components/async-skia';
+import { HarmonyCaptureDialog } from '@/components/harmony-capture-dialog';
 import { MorphLoader } from '@/components/morph-loader';
 import { ParallaxCarousel } from '@/components/parallax-carousel';
 import { RhythmCaptureDialog } from '@/components/rhythm-capture-dialog';
@@ -31,6 +32,7 @@ import {
   createHarmonySequenceEntry,
   type HarmonySequenceEntry,
 } from '@/packages/music-core/src/harmony-sequence';
+import type { HarmonyCaptureAnalysis } from '@/packages/music-core/src/harmony-capture';
 import {
   buildPlayablePattern,
   type PlayableRhythmLayer,
@@ -116,6 +118,14 @@ interface PlaybackSnapshot {
   layers: readonly AppRhythmLayer[];
 }
 
+function hasPlayableAudio(snapshot: PlaybackSnapshot): boolean {
+  const hasHarmony =
+    snapshot.harmonyIncluded && snapshot.sequence.some((entry) => !entry.muted);
+  const hasRhythm =
+    snapshot.rhythmIncluded && snapshot.layers.some((layer) => layer.steps.some(Boolean));
+  return hasHarmony || hasRhythm;
+}
+
 function chordLabel(face: FiniteTonnetzFace): string {
   return `${NOTE_NAMES[face.rootPc]}${face.quality === 'min' ? 'm' : ''}`;
 }
@@ -135,6 +145,7 @@ export default function Page() {
   );
   const [scaleDialogOpen, setScaleDialogOpen] = useState(false);
   const [rhythmSoundDialogOpen, setRhythmSoundDialogOpen] = useState(false);
+  const [harmonyCaptureDialogOpen, setHarmonyCaptureDialogOpen] = useState(false);
   const [rhythmCaptureDialogOpen, setRhythmCaptureDialogOpen] = useState(false);
   const [bpm, setBpm] = useState(INITIAL_BPM);
   const [transport, setTransport] = useState<TransportState>('idle');
@@ -183,7 +194,10 @@ export default function Page() {
       });
 
       if (code === 'silence') {
-        stopPlayback();
+        stopStrudel();
+        playingRef.current = false;
+        setAudioError('NO SOUNDS AVAILABLE · ADD NOTES OR ACTIVE RHYTHM');
+        setTransport('idle');
         return;
       }
 
@@ -223,7 +237,16 @@ export default function Page() {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
       return;
     }
-    void applyPlayback(currentSnapshot());
+    const snapshot = currentSnapshot();
+    if (!hasPlayableAudio(snapshot)) {
+      stopStrudel();
+      playingRef.current = false;
+      setAudioError('NO SOUNDS AVAILABLE · ADD NOTES OR ACTIVE RHYTHM');
+      setTransport('idle');
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
+    void applyPlayback(snapshot);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
@@ -314,6 +337,7 @@ export default function Page() {
     setView(nextView);
     setScaleDialogOpen(false);
     setRhythmSoundDialogOpen(false);
+    setHarmonyCaptureDialogOpen(false);
     setRhythmCaptureDialogOpen(false);
     void Haptics.selectionAsync();
   }, []);
@@ -392,6 +416,48 @@ export default function Page() {
     [capturedLayers],
   );
 
+  const handleHarmonyCapturePreview = useCallback(
+    (analysis: HarmonyCaptureAnalysis): void => {
+      const code = buildPlayablePattern({
+        chords: analysis.entries.map((entry) => ({
+          duration: entry.duration,
+          muted: false,
+          rootPc: entry.face.rootPc,
+          quality: entry.face.quality,
+        })),
+      });
+      void playStrudel(code, Math.round(analysis.bpm));
+    },
+    [],
+  );
+
+  const handleHarmonyCapturePreviewStop = useCallback((): void => {
+    stopStrudel();
+    playingRef.current = false;
+    setTransport('idle');
+  }, []);
+
+  const handleHarmonyCapturePreviewPause = useCallback((): void => {
+    pauseStrudel();
+    playingRef.current = false;
+    setTransport('idle');
+  }, []);
+
+  const handleHarmonyCaptureApply = useCallback(
+    (analysis: HarmonyCaptureAnalysis, applyTempo: boolean): void => {
+      const nextSequence = analysis.entries.map((entry) => ({
+        duration: entry.duration,
+        face: entry.face,
+        muted: false,
+      }));
+      setSequence(nextSequence);
+      setSelected(nextSequence.at(-1)?.face ?? null);
+      if (applyTempo) setBpm(Math.round(analysis.bpm));
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    [],
+  );
+
   const selectedLabel = selected ? chordLabel(selected) : 'Build a sequence';
   const rhythmLabel = rhythmLayers
     .map((layer) => `E(${layer.steps.filter(Boolean).length},${layer.steps.length})`)
@@ -400,16 +466,20 @@ export default function Page() {
     .map((layer) => `${layer.label} ${getRhythmSoundOption(layer.soundId).title}`)
     .join(', ');
   const masterActive = transport === 'loading' || transport === 'playing';
-  const soundingHarmony = harmonyIncluded && sequence.length > 0;
+  const soundingHarmony = harmonyIncluded && sequence.some((entry) => !entry.muted);
+  const soundingRhythm = rhythmIncluded && rhythmLayers.some((layer) => layer.steps.some(Boolean));
+  const playableAudio = soundingHarmony || soundingRhythm;
   const transportLabel =
     transport === 'loading'
       ? 'STARTING AUDIO…'
       : transport === 'error'
         ? `AUDIO ERROR · ${audioError ?? 'TRY AGAIN'}`
         : transport === 'playing'
-          ? `${soundingHarmony ? 'HARMONY' : ''}${soundingHarmony && rhythmIncluded ? ' + ' : ''}${rhythmIncluded ? 'RHYTHM' : ''} PLAYING`
-          : sequence.length === 0
-            ? 'ADD CHORDS OR PLAY THE RHYTHM'
+          ? `${soundingHarmony ? 'HARMONY' : ''}${soundingHarmony && soundingRhythm ? ' + ' : ''}${soundingRhythm ? 'RHYTHM' : ''} PLAYING`
+          : !playableAudio
+            ? 'NO SOUNDS AVAILABLE · ADD NOTES OR ACTIVE RHYTHM'
+            : sequence.length === 0
+              ? 'RHYTHM READY'
             : `READY · ${sequence.length} CHORD${sequence.length === 1 ? '' : 'S'}`;
 
   return (
@@ -481,7 +551,29 @@ export default function Page() {
             </View>
           )}
         </Pressable>
-        {view === 'rhythm' ? (
+        {view === 'harmony' ? (
+          <Pressable
+            accessibilityLabel="Capture a harmony with the microphone"
+            accessibilityRole="button"
+            accessibilityState={{ expanded: harmonyCaptureDialogOpen }}
+            hitSlop={6}
+            onPress={() => {
+              stopPlayback();
+              setScaleDialogOpen(false);
+              setHarmonyCaptureDialogOpen(true);
+              void Haptics.selectionAsync();
+            }}
+            style={[
+              styles.contextMenuButton,
+              harmonyCaptureDialogOpen && styles.contextMenuButtonActive,
+            ]}
+          >
+            <View style={styles.micIcon}>
+              <View style={styles.micCapsule} />
+              <View style={styles.micStem} />
+            </View>
+          </Pressable>
+        ) : (
           <Pressable
             accessibilityLabel="Capture a rhythm with the microphone"
             accessibilityRole="button"
@@ -503,7 +595,7 @@ export default function Page() {
               <View style={styles.micStem} />
             </View>
           </Pressable>
-        ) : null}
+        )}
         <View
           style={[
             styles.transportDot,
@@ -624,7 +716,13 @@ export default function Page() {
       <View style={styles.controls}>
         <StackedChips>
           <StackedChips.Trigger onPress={handleTransportToggle}>
-            <View style={[styles.chip, masterActive ? styles.stopChip : styles.playChip]}>
+            <View
+              style={[
+                styles.chip,
+                masterActive ? styles.stopChip : styles.playChip,
+                !masterActive && !playableAudio && styles.playChipUnavailable,
+              ]}
+            >
               <Text style={[styles.chipText, !masterActive && styles.playChipText]}>
                 {masterActive ? '■  STOP' : '▶  PLAY'}
               </Text>
@@ -658,6 +756,14 @@ export default function Page() {
         onPreview={handleRhythmCapturePreview}
         onStopPreview={handleRhythmCapturePreviewStop}
         visible={rhythmCaptureDialogOpen}
+      />
+      <HarmonyCaptureDialog
+        onApply={handleHarmonyCaptureApply}
+        onClose={() => setHarmonyCaptureDialogOpen(false)}
+        onPausePreview={handleHarmonyCapturePreviewPause}
+        onPreview={handleHarmonyCapturePreview}
+        onStopPreview={handleHarmonyCapturePreviewStop}
+        visible={harmonyCaptureDialogOpen}
       />
     </SafeAreaView>
   );
@@ -810,6 +916,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 17,
   },
   playChip: { backgroundColor: '#f7f8ff' },
+  playChipUnavailable: { opacity: 0.48 },
   stopChip: { backgroundColor: '#3b2030' },
   playChipText: { color: '#08090c' },
   chipText: { color: '#f7f8ff', fontSize: 10, fontWeight: '800', letterSpacing: 1.1 },

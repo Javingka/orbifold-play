@@ -4,9 +4,16 @@ This file is the project-specific layer of the Pilot+Planner+Machine methodology
 
 ## About this project
 
-Orbifold is a web-based live-coding music instrument built on **Strudel** (a JS port of TidalCycles), with a **PIXI/WebGL** interface in a sober "Apple"-like aesthetic. It organizes music with **Tymoczko's chord geometry**: a navigable Tonnetz, neo-Riemannian P·L·R transformations, minimal voice-leading, and Euclidean rhythms, plus a DAW-style composition timeline and an AI Agent with skills that create rhythm/harmony and update the UI. This initiative formalizes the existing prototype into a professional project (build, types, tests, static deploy) without losing prototype behavior.
+Orbifold Play is the independent mobile-first Expo + React Native instrument
+defined by [`ORBIFOLD_PLAY_BRIEF.md`](ORBIFOLD_PLAY_BRIEF.md). It may consult the
+classic Orbifold desktop implementation and prototypes as porting references for
+tested music theory and Strudel behavior, but it does not share the desktop
+application's UI architecture, initiative state, branches, or implementation
+scope.
 
-The authoritative brief is [`ORBIFOLD_KICKOFF.md`](ORBIFOLD_KICKOFF.md). The functional source of truth is the prototype at [`reference/orbifold.html`](reference/orbifold.html) — logic is ported from it without behavior loss.
+Repository boundary: work for Orbifold Play stays inside this repository. Never
+modify, combine, or treat the separate Orbifold desktop repository as the active
+project.
 
 ## Methodology
 
@@ -20,7 +27,11 @@ Planner and Dev run as **isolated subagents** (`.claude/agents/planner.md`, `.cl
 
 ## Current initiative
 
-**None — awaiting next initiative scoping.** `song-import` (below) closed out Checkpoint #5 and merged to `main` 2026-07-16.
+**`harmony-capture` — Phase 01 scoping.** Add a guided mobile microphone
+workflow that captures a repeated monophonic root sequence, presents a
+reviewable/editable major-or-minor chord progression, previews it without
+mutating current harmony, and replaces current harmony only after explicit
+confirmation.
 
 **Previous initiatives:**
 
@@ -43,18 +54,17 @@ Planner and Dev run as **isolated subagents** (`.claude/agents/planner.md`, `.cl
 
 ## Project-specific conventions
 
-### Stack (confirmed at kickoff)
+### Stack (confirmed for Orbifold Play)
 
-- **Build/dev:** Vite
+- **Build/dev:** Expo + React Native Web/PWA
 - **Language:** TypeScript (`strict`)
-- **UI:** Svelte (PIXI draws the canvas — Tonnetz and orbits)
-- **Graphics:** PixiJS **v7** (port 1:1; v8 migration is a future phase — pin exact version)
-- **Audio:** Strudel (`@strudel/web`, pinned version)
-- **Validation:** Zod (agent JSON + saved session schema, versioned)
-- **Tests:** Vitest (pure engines) + optional Playwright (E2E smoke)
-- **Quality:** ESLint + Prettier + `tsc --noEmit`
-- **Package manager:** pnpm
-- **Package name:** `orbifold`
+- **UI:** React Native
+- **Graphics:** React Native Skia
+- **Interaction:** React Native Reanimated + Expo Blur/Haptics
+- **Audio:** Strudel (`@strudel/web`, pinned) behind platform adapters
+- **Tests:** Vitest for pure engines
+- **Quality:** ESLint + TypeScript
+- **Package manager:** pnpm with exact dependency versions
 
 ### Branch and commit
 
@@ -145,7 +155,7 @@ Do NOT clear mid-step or during a REVISE iteration cycle.
 
 ## Decisions Register
 
-`docs/orbifold-v1/decisions.md`. Required reading every Planner and Dev invocation. **Only the Pilot writes.**
+`docs/mobile-play/decisions.md`. Required reading every Planner and Dev invocation. **Only the Pilot writes.**
 
 See `references/decisions-register-convention.md` for entry format.
 

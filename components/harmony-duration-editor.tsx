@@ -138,8 +138,8 @@ function ElasticDurationSlider({
             styles.thumb,
             thumbStyle,
             {
-              backgroundColor: '#f8f9ff',
-              borderColor: accent,
+              backgroundColor: accent,
+              borderColor: '#F8F9FF',
               left: `${progress * 100}%`,
               shadowColor: accent,
             },
@@ -160,16 +160,17 @@ function ElasticDurationSlider({
 function EditorAction({
   accent,
   active = false,
+  icon,
   label,
   onPress,
-  symbol,
 }: {
   accent: string;
   active?: boolean;
+  icon: 'mute' | 'trash';
   label: string;
   onPress: () => void;
-  symbol: string;
 }) {
+  const iconColor = active ? '#07100F' : icon === 'trash' ? '#E87BAC' : '#AEB5C8';
   return (
     <Pressable
       accessibilityLabel={label}
@@ -184,7 +185,30 @@ function EditorAction({
         pressed && styles.pressed,
       ]}
     >
-      <Text style={[styles.actionSymbol, active && styles.actionSymbolActive]}>{symbol}</Text>
+      {icon === 'mute' ? (
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={styles.muteIcon}
+        >
+          <View style={[styles.speakerBody, { backgroundColor: iconColor }]} />
+          <View style={[styles.speakerCone, { borderRightColor: iconColor }]} />
+          <View style={[styles.muteSlash, { backgroundColor: iconColor }]} />
+        </View>
+      ) : (
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={styles.trashIcon}
+        >
+          <View style={[styles.trashLid, { backgroundColor: iconColor }]} />
+          <View style={[styles.trashHandle, { borderColor: iconColor }]} />
+          <View style={[styles.trashBin, { borderColor: iconColor }]}>
+            <View style={[styles.trashLine, { backgroundColor: iconColor }]} />
+            <View style={[styles.trashLine, { backgroundColor: iconColor }]} />
+          </View>
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -219,11 +243,11 @@ export function HarmonyDurationEditor({
         <EditorAction
           accent={accent}
           active={muted}
+          icon="mute"
           label={muted ? 'Unmute chord' : 'Mute chord'}
           onPress={onMuteToggle}
-          symbol="M"
         />
-        <EditorAction accent="#e87bac" label="Delete chord" onPress={onDelete} symbol="×" />
+        <EditorAction accent="#e87bac" icon="trash" label="Delete chord" onPress={onDelete} />
       </View>
     </Animated.View>
   );
@@ -279,8 +303,75 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  actionSymbol: { color: '#aeb5c8', fontSize: 13, fontWeight: '800' },
-  actionSymbolActive: { color: '#07100f' },
+  muteIcon: {
+    width: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  speakerBody: {
+    position: 'absolute',
+    left: 2,
+    width: 5,
+    height: 7,
+    borderRadius: 1,
+  },
+  speakerCone: {
+    position: 'absolute',
+    left: 5,
+    width: 0,
+    height: 0,
+    borderTopWidth: 5,
+    borderBottomWidth: 5,
+    borderRightWidth: 7,
+    borderTopColor: 'transparent',
+    borderBottomColor: 'transparent',
+    transform: [{ rotate: '180deg' }],
+  },
+  muteSlash: {
+    position: 'absolute',
+    width: 19,
+    height: 2,
+    borderRadius: 1,
+    transform: [{ rotate: '-45deg' }],
+  },
+  trashIcon: {
+    width: 16,
+    height: 18,
+    alignItems: 'center',
+  },
+  trashLid: {
+    position: 'absolute',
+    top: 4,
+    width: 15,
+    height: 2,
+    borderRadius: 1,
+  },
+  trashHandle: {
+    position: 'absolute',
+    top: 1,
+    width: 6,
+    height: 4,
+    borderWidth: 1.5,
+    borderBottomWidth: 0,
+    borderTopLeftRadius: 2,
+    borderTopRightRadius: 2,
+  },
+  trashBin: {
+    position: 'absolute',
+    top: 7,
+    width: 12,
+    height: 10,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 2,
+    paddingTop: 2,
+    borderWidth: 1.5,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 2,
+    borderBottomRightRadius: 2,
+  },
+  trashLine: { width: 1, height: 5, borderRadius: 1 },
   pressed: { opacity: 0.7, transform: [{ scale: 0.91 }] },
   sliderWrap: { flex: 1 },
   sliderHit: { height: 23, justifyContent: 'center', marginHorizontal: 7 },

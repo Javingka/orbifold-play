@@ -21,6 +21,9 @@ import {
 } from 'react-native-reanimated';
 
 interface GooeyViewSwitchProps {
+  activeColors?: readonly [string, string];
+  accessibilityLabel?: string;
+  labels?: readonly [string, string];
   onToggle: (rhythmActive: boolean) => void;
   rhythmActive: boolean;
 }
@@ -31,7 +34,13 @@ const LEFT_X = 21;
 const RIGHT_X = 51;
 const RADIUS = 14;
 
-export function GooeyViewSwitch({ onToggle, rhythmActive }: GooeyViewSwitchProps) {
+export function GooeyViewSwitch({
+  activeColors = ['#f3b15a', '#56cfc4'],
+  accessibilityLabel,
+  labels = ['H', 'R'],
+  onToggle,
+  rhythmActive,
+}: GooeyViewSwitchProps) {
   const progress = useSharedValue(rhythmActive ? 1 : 0);
 
   useEffect(() => {
@@ -54,14 +63,17 @@ export function GooeyViewSwitch({ onToggle, rhythmActive }: GooeyViewSwitchProps
   const ovalWidth = useDerivedValue(() => radiusX.value * 2);
   const ovalHeight = useDerivedValue(() => radiusY.value * 2);
   const activeColor = useDerivedValue(() =>
-    interpolateColor(progress.value, [0, 1], ['#f3b15a', '#56cfc4']),
+    interpolateColor(progress.value, [0, 1], activeColors),
   );
 
   const colorMatrix = [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 30, -13];
 
   return (
     <Pressable
-      accessibilityLabel={rhythmActive ? 'Switch to Harmony view' : 'Switch to Rhythm view'}
+      accessibilityLabel={
+        accessibilityLabel ??
+        (rhythmActive ? 'Switch to Harmony view' : 'Switch to Rhythm view')
+      }
       accessibilityRole="switch"
       accessibilityState={{ checked: rhythmActive }}
       hitSlop={8}
@@ -92,8 +104,8 @@ export function GooeyViewSwitch({ onToggle, rhythmActive }: GooeyViewSwitchProps
         <Oval x={ovalX} y={ovalY} width={ovalWidth} height={ovalHeight} color={activeColor} />
       </Canvas>
       <View pointerEvents="none" style={styles.labels}>
-        <Text style={[styles.label, !rhythmActive && styles.activeLabel]}>H</Text>
-        <Text style={[styles.label, rhythmActive && styles.activeLabel]}>R</Text>
+        <Text style={[styles.label, !rhythmActive && styles.activeLabel]}>{labels[0]}</Text>
+        <Text style={[styles.label, rhythmActive && styles.activeLabel]}>{labels[1]}</Text>
       </View>
     </Pressable>
   );

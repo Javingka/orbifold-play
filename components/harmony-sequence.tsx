@@ -200,6 +200,10 @@ export function HarmonySequence({
   const editingMaterial = editingEntry
     ? resolveFluidTonnetzMaterial(editingEntry.face, scaleRootPc, scaleMode, true)
     : null;
+  const editingAccent =
+    editingMaterial?.role === 'outside'
+      ? editingMaterial.colors[0]
+      : editingMaterial?.edgeColor;
 
   useEffect(() => {
     if (!isPlaying || sequence.length === 0) {
@@ -329,10 +333,10 @@ export function HarmonySequence({
           </Pressable>
         ) : null}
       </View>
-      {editingEntry && editingMaterial && editingIndex !== null ? (
+      {editingEntry && editingMaterial && editingAccent && editingIndex !== null ? (
         <View style={styles.editorOverlay}>
           <HarmonyDurationEditor
-            accent={editingMaterial.edgeColor}
+            accent={editingAccent}
             chordLabel={labelFor(editingEntry.face)}
             duration={editingEntry.duration}
             muted={editingEntry.muted}
