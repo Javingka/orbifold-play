@@ -126,15 +126,29 @@ max transition rate 35.92 oct/s).
 | B-05 | Full regression suite, lint, typecheck, build pass | full quality suite | integration | covered |
 | B-06 | Physical HTTPS phone capture yields a visibly correct progression | — | operability | open — carried manual follow-up (Phase 01 A-11) |
 
-### Remaining manual follow-up
+### Device verification (B-06) — 2026-07-28
 
-B-06 requires a phone on a secure origin: grant permission, sing/whistle a
-repeated root phrase, and verify the editable progression matches the sung
-roots, including on a deliberately busy UI (scroll during recording) to
-confirm the AudioWorklet path records without dropouts.
+The Pilot tested the guided capture flow on a physical phone over the HTTPS
+tunnel (Expo web, `expo start --web --tunnel`) and confirmed the sung/whistled
+capture now works and is a clear improvement over the Phase 01 baseline. B-06
+is satisfied.
 
 ### Source-control result
 
-Implemented on branch `harmony-capture/phase-02`; committed per step. Not
-pushed and not merged — Pilot review (Checkpoint #5) pending, along with ADR
-0031 ratification (Checkpoint #2, OD-12/OD-13).
+Implemented on branch `harmony-capture/phase-02`; committed per step. ADR 0031
+ratified by the Pilot 2026-07-29 (Accepted). Merged to `main` 2026-07-29 with
+the rhythm-capture Phase 02 work (same branch, same Pilot review) — see
+`docs/rhythm-capture/handoffs/phase-02-handoff.md` for that phase's own
+acceptance evidence.
+
+### Register proposals (Pilot to resolve)
+
+- **pYIN parameters are the estimation-stage source of truth.** For
+  `packages/music-core/src/pyin.ts`, the pYIN paper + librosa defaults (100
+  thresholds, Beta(2,18), Boltzmann(2), switch/no-trough 0.01, max transition
+  35.92 oct/s) govern behavior; `melody-lab.html` parity no longer applies to
+  this stage (superseded for this file only). Source: ADR 0031.
+- **Capture acquisition uses AudioWorklet-first with ScriptProcessor fallback.**
+  Applies to both `harmony-capture.web.ts` and (Phase 02 rhythm)
+  `rhythm-capture.web.ts`, and should apply to any future audio-capture
+  adapter in this codebase. Source: ADR 0031/0032.

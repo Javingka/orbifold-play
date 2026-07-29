@@ -4,7 +4,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 # ADR 0032 — Offline spectral-flux onset detection replaces the live envelope state machine
 
-- **Status:** Proposed — pending Pilot ratification (Checkpoint #2)
+- **Status:** Accepted — ratified by Pilot 2026-07-29, confirmed on a physical
+  device
 - **Date:** 2026-07-28
 - **Initiative / Phase:** rhythm-capture / Phase 02
 - **Deciders:** Pilot (Javier)

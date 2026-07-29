@@ -84,12 +84,25 @@ Dixon, "Onset Detection Revisited" (DAFx 2006); Böck, Krebs, Schedl (ISMIR
 | C-05 | Full suite/lint/typecheck/build green | quality suite | integration | covered |
 | C-06 | Phone HTTPS groove → correct editable pattern | — | operability | open — manual device pass |
 
-### Remaining manual follow-up
-C-06: on a phone over HTTPS, beatbox/tap a repeated groove and confirm the
-editable pattern matches, including scrolling during recording to confirm the
-AudioWorklet path records without dropouts. Confirm the dialog shows the new
-`analyzing` phase.
+### Device verification (C-06) — 2026-07-28
+
+The Pilot tested the guided capture flow on a physical phone over the HTTPS
+tunnel and confirmed the groove capture now works and is a clear improvement
+over the Phase 01 baseline. C-06 is satisfied.
 
 ### Source-control result
-Implemented on branch `harmony-capture/phase-02` (continued session). Committed
-per step. Not pushed/merged — Pilot review and ADR 0032 ratification pending.
+Implemented on branch `harmony-capture/phase-02` (continued session, carries
+both harmony-capture and rhythm-capture Phase 02 work). Committed per step.
+ADR 0032 ratified by the Pilot 2026-07-29 (Accepted). Merged to `main`
+2026-07-29.
+
+### Register proposals (Pilot to resolve)
+
+- **Rhythm onset detection is offline, not live.** `packages/audio/src/
+  rhythm-capture.web.ts` records complete PCM and detects onsets after
+  recording via `packages/music-core/src/onset-detection.ts`; the realtime
+  callback is a level meter plus one feedback flash only, never the source of
+  truth for onsets. Source: ADR 0032.
+- **`beatbox-lab_7.html` prototype parity applies only to
+  `analyzeRhythmCapture`** (tempo/phase/vote/quantize), not to onset
+  detection, which now cites Dixon 2006 / Böck et al. 2012. Source: ADR 0032.

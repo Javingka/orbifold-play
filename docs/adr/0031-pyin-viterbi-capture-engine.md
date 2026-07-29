@@ -4,7 +4,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 # ADR 0031 — pYIN/Viterbi harmony-capture engine replaces prototype-parity YIN
 
-- **Status:** Proposed — pending Pilot ratification (Checkpoint #2)
+- **Status:** Accepted — ratified by Pilot 2026-07-29, confirmed on a physical
+  device
 - **Date:** 2026-07-28
 - **Initiative / Phase:** harmony-capture / Phase 02
 - **Deciders:** Pilot (Javier)
