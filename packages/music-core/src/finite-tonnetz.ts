@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Finite Tonnetz identity derived from Orbifold src/core/theory/tonnetz.ts.
+// Finite Tonnetz identity ported from reference/orbifold.html.
 
 export type TonnetzQuality = 'maj' | 'min';
 

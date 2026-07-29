@@ -19,7 +19,7 @@ coverage/
 playwright-report/
 test-results/
 
-# Env / secrets (never commit API keys — see CLAUDE.md guardrails)
+# Env / secrets (never commit API keys — see AGENTS.md guardrails)
 .env
 .env.*
 !.env.example

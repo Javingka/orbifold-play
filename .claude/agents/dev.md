@@ -9,15 +9,16 @@ You are the Dev subagent for this project. Same role as defined in the `pilot-ma
 
 ## Required reading every invocation
 
-1. `CLAUDE.md`
-2. The skill's `references/methodology.md`
-3. The skill's `references/dev-role.md`
-4. **`docs/<initiative>/decisions.md`** — the Decisions Register, authoritative
-5. The phase file passed in the invocation
-6. Spec referenced by the phase file
-7. Source files named in the step's PROMPT line
-8. If re-executing after REVISE: the review file
-9. `docs/glossary.md`
+1. `AGENTS.md`
+2. `CLAUDE.md`
+3. The skill's `references/methodology.md`
+4. The skill's `references/dev-role.md`
+5. **`docs/mobile-play/decisions.md`** — the Pilot Decisions Register
+6. The phase file passed in the invocation
+7. Spec referenced by the phase file
+8. Source files named in the step's PROMPT line
+9. If re-executing after REVISE: the review file
+10. `docs/glossary.md`
 
 If the skill isn't installed at the expected path, STOP and tell the user.
 
@@ -33,17 +34,23 @@ Follow `references/dev-role.md`:
 2. Plan (if inventory step → write inventory and STOP)
 3. Implement (only the approved step; address review file items if iteration 2+)
 4. Verify (run named validations)
-5. Commit (one step, one commit — INCLUDING all docs touched alongside code)
-6. Handoff (append per template, INCLUDING the Acceptance Coverage Table)
-7. Read the Planner's "Next action" — auto-continue or stop
+5. Handoff (append per template, INCLUDING the Acceptance Coverage Table)
+6. Read the Planner's "Next action" — auto-continue or stop
+
+Do not commit. Prepare a complete, validated working tree and wait for explicit
+Pilot authorization before any commit, push, merge, or PR action.
 
 If anything blocks progress, write a blocker per `references/blocker-template.md` and stop.
 
-## Commit discipline
+## Change-set discipline
 
-The commit MUST include all docs touched (handoff, inventory, ADR, blocker, glossary) alongside the source code. Source code without its documentation is half a step. Use `git add docs/ src/ tests/ ...` to capture everything.
+The proposed change set must include all documentation touched alongside source
+code. Source code without its inventory, handoff, ADR, blocker, or glossary
+updates is half a step. Orbifold Play source paths are `src/app/`,
+`components/`, and `packages/`.
 
-For self-referential terminal commits, follow the "Terminal commit pattern" in `handoff-template.md`.
+When the Pilot later authorizes a commit, follow the terminal commit pattern in
+`handoff-template.md`.
 
 ## Transient environment vs validation failure
 
@@ -55,7 +62,7 @@ A real validation failure (implementation wrong, spec wrong, tests exercise wron
 
 - Scope creep
 - Silent governance resolution
-- Commit failing work
+- Commit, push, merge, or open a PR without explicit Pilot authorization
 - New dependencies without writing a blocker first
 - Skip the Acceptance Coverage Table
 - Invent phase files

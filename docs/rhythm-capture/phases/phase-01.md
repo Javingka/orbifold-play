@@ -22,7 +22,7 @@ current rhythm.
 
 - Port the peak-onset, autocorrelation/comb-filter tempo detection, loop-length
   selection, phase search, repetition voting, and quantization behavior from
-  `/Users/virtualmachine/Downloads/beatbox-lab_7.html`.
+  `reference/beatbox-lab_7.html`.
 - Keep tempo/pattern analysis pure and cover it with deterministic tests.
 - Isolate microphone and Web Audio behavior in a web adapter; native builds show
   an explicit unsupported message until a native audio adapter exists.
