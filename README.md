@@ -15,6 +15,17 @@ The first playable release is intentionally narrow:
 See [ORBIFOLD_PLAY_BRIEF.md](ORBIFOLD_PLAY_BRIEF.md) and
 [Phase 01](docs/mobile-play/phases/phase-01.md).
 
+## Repository boundary
+
+This repository contains only the Expo/React Native Orbifold Play application.
+It is independent from the separate Orbifold desktop repository and does not
+contain its Svelte/PIXI runtime, desktop tests, or desktop initiative history.
+
+Production code lives in `src/app`, `components`, and `packages`. Files in
+`reference/` are isolated, non-runtime parity sources and are never imported by
+the application. See [AGENTS.md](AGENTS.md) for the shared Codex/Claude project
+contract and [docs/README.md](docs/README.md) for the documentation map.
+
 ## Development
 
 ```sh

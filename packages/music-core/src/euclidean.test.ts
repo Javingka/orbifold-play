@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Parity source: Orbifold src/core/rhythm/euclid.ts and
-// reference/orbifold.html lines 794–813.
+// Parity source: reference/orbifold.html lines 794–813.
 import { describe, expect, it } from 'vitest';
 
 import { bjorklund, rotate } from './euclidean';

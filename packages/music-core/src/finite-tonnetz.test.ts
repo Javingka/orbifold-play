@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Parity source: Orbifold src/core/theory/tonnetz.ts and reference/orbifold.html
+// Parity source: reference/orbifold.html
 // buildTonnetz() triangle rules.
 import { describe, expect, it } from 'vitest';
 

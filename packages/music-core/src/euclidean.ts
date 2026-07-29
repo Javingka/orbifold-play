@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Ported from Orbifold src/core/rhythm/euclid.ts and
-// reference/orbifold.html lines 794–813.
+// Ported from reference/orbifold.html lines 794–813.
 
 export function bjorklund(hits: number, steps: number): number[] {
   const boundedSteps = Math.max(1, Math.round(steps));

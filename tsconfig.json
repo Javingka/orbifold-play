@@ -7,7 +7,9 @@
     "exactOptionalPropertyTypes": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": [
+        "./*"
+      ]
     }
   },
   "include": [
@@ -16,8 +18,11 @@
     "components/**/*.ts",
     "components/**/*.tsx",
     "packages/**/*.ts",
-    "packages/**/*.tsx",
-    "expo-env.d.ts"
+    "packages/**/*.tsx"
   ],
-  "exclude": ["node_modules", "dist", "src"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src"
+  ]
 }
