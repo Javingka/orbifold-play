@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Beatbox Lab — mic → ritmo → Strudel</title>
+<style>
+  :root{
+    --bg:#0B0E14; --panel:#11151F; --panel2:#161B28; --line:#232B3D;
+    --txt:#C7D0E0; --dim:#5C6880;
+    --bd:#FFB454; --sd:#FF6B9D; --hh:#5CCFE6;
+    --ok:#7FD962; --warn:#FF8F40; --amb:#8A7CFF;
+    --mono:ui-monospace,'SF Mono','Cascadia Mono','JetBrains Mono',Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-size:14px;line-height:1.5;padding:20px;max-width:900px;margin:0 auto}
+  h1{font-size:18px;font-weight:600;letter-spacing:.04em}
+  h1 .tag{color:var(--dim);font-weight:400}
+  .sub{color:var(--dim);font-size:12px;margin-bottom:18px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:14px}
+  .row{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+  label{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:4px}
+  input[type=number]{background:var(--panel2);border:1px solid var(--line);color:var(--txt);font-family:var(--mono);font-size:15px;padding:6px 8px;border-radius:5px;width:76px}
+  input[type=range]{accent-color:var(--hh);width:130px;vertical-align:middle}
+  select{background:var(--panel2);border:1px solid var(--line);color:var(--txt);font-family:var(--mono);padding:6px 8px;border-radius:5px}
+  button{background:var(--panel2);border:1px solid var(--line);color:var(--txt);font-family:var(--mono);font-size:14px;padding:9px 18px;border-radius:6px;cursor:pointer}
+  button:hover{border-color:var(--dim)}
+  button:focus-visible{outline:2px solid var(--hh);outline-offset:2px}
+  button.primary{background:#1E2A1A;border-color:var(--ok);color:var(--ok);font-weight:600}
+  button.rec{background:#2A1518;border-color:var(--sd);color:var(--sd);font-weight:600}
+  button.amb{background:#1B1830;border-color:var(--amb);color:var(--amb);font-weight:600}
+  button:disabled{opacity:.35;cursor:default}
+  .status{font-size:13px;padding:8px 12px;border-radius:6px;background:var(--panel2);border:1px solid var(--line);min-height:36px;display:flex;align-items:center;gap:8px}
+  .status .dot{width:8px;height:8px;border-radius:50%;background:var(--dim);flex:none}
+  .status.live .dot{background:var(--sd);animation:blink 1s infinite}
+  .status.count .dot{background:var(--warn)}
+  .status.amb .dot{background:var(--amb);animation:blink .8s infinite}
+  @keyframes blink{50%{opacity:.2}}
+
+  .beacon{display:flex;gap:12px;justify-content:center;align-items:center;margin:14px 0 4px;height:64px}
+  .beacon .lamp{width:46px;height:46px;border-radius:50%;background:var(--panel2);border:2px solid var(--line);transition:background .04s,transform .04s,box-shadow .04s}
+  .beacon .lamp.hot{background:var(--warn);border-color:var(--warn);transform:scale(1.18);box-shadow:0 0 24px var(--warn)}
+  .beacon .lamp.acc{background:var(--panel2);border-color:var(--ok)}
+  .beacon .lamp.acc.hot{background:var(--ok);box-shadow:0 0 30px var(--ok)}
+  .beacon .lamp.pulse{background:var(--hh);border-color:var(--hh);box-shadow:0 0 24px var(--hh)}
+  button.pulsing{background:#0E2A30;border-color:var(--hh);color:var(--hh);font-weight:600}
+  .beaconLbl{text-align:center;font-size:12px;color:var(--dim);letter-spacing:.06em}
+
+  .energyWrap{margin-top:14px}
+  .energyBar{position:relative;height:34px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .energyFill{position:absolute;left:0;top:0;bottom:0;width:0%;background:var(--dim);transition:width .04s linear,background .08s}
+  .energyFill.over{background:var(--ok)}
+  .noiseZone{position:absolute;top:0;bottom:0;left:0;background:rgba(138,124,255,.16);border-right:1px dashed var(--amb);width:0%}
+  .threshMark{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--sd);box-shadow:0 0 8px var(--sd);left:0%;cursor:grab;z-index:5}
+  .threshMark::before{content:'';position:absolute;left:-9px;right:-9px;top:0;bottom:0}
+  .threshMark::after{content:'umbral ⇔';position:absolute;top:-16px;left:-20px;font-size:9px;color:var(--sd);white-space:nowrap}
+  .threshMark .grip{position:absolute;left:-5px;top:50%;transform:translateY(-50%);width:12px;height:20px;background:var(--sd);border-radius:3px;box-shadow:0 0 8px var(--sd)}
+  .threshMark.dragging{cursor:grabbing}
+  .peakMark{position:absolute;top:2px;bottom:2px;width:3px;background:var(--warn);border-radius:2px;left:0%;opacity:.9;transition:left .12s ease-out;z-index:4}
+  .peakMark::after{content:'pico';position:absolute;bottom:-15px;left:-8px;font-size:9px;color:var(--warn)}
+  .energyBar.grabbable{cursor:crosshair}
+  .energyLegend{display:flex;justify-content:space-between;font-size:10px;color:var(--dim);margin-top:5px}
+  .flash{animation:flash .18s}
+  @keyframes flash{0%{box-shadow:inset 0 0 0 2px var(--ok)}100%{box-shadow:inset 0 0 0 2px transparent}}
+  .stat{display:flex;gap:18px;margin-top:10px;flex-wrap:wrap}
+  .stat div{font-size:11px;color:var(--dim)} .stat b{color:var(--txt)}
+  .stat .cbd{color:var(--bd)} .stat .csd{color:var(--sd)} .stat .chh{color:var(--hh)}
+
+  .lanes{display:grid;grid-template-columns:38px repeat(16,1fr);gap:4px;margin-top:6px}
+  .laneLabel{font-size:12px;align-self:center;font-weight:600}
+  .laneLabel.bd{color:var(--bd)} .laneLabel.sd{color:var(--sd)} .laneLabel.hh{color:var(--hh)}
+  .cell{aspect-ratio:1/1.4;background:var(--panel2);border:1px solid var(--line);border-radius:3px;cursor:pointer;position:relative}
+  .cell[data-beat="0"]{border-color:#33405C}
+  .cell.on.bd{background:var(--bd);border-color:var(--bd)}
+  .cell.on.sd{background:var(--sd);border-color:var(--sd)}
+  .cell.on.hh{background:var(--hh);border-color:var(--hh)}
+  .cell.playhead::after{content:'';position:absolute;inset:-3px;border:1px solid var(--txt);border-radius:4px}
+  .steps{display:grid;grid-template-columns:38px repeat(16,1fr);gap:4px;margin-top:4px}
+  .steps span{font-size:9px;color:var(--dim);text-align:center}
+
+  #eventLog{font-size:12px;color:var(--dim);max-height:96px;overflow-y:auto;margin-top:8px;line-height:1.7}
+  #eventLog b.bd{color:var(--bd)} #eventLog b.sd{color:var(--sd)} #eventLog b.hh{color:var(--hh)}
+  pre{background:#080A10;border:1px solid var(--line);border-radius:6px;padding:12px;font-size:13px;overflow-x:auto;white-space:pre;color:#9FB0CC;margin-top:10px}
+  .hint{font-size:12px;color:var(--dim);margin-top:8px}
+  .hint b{color:var(--txt);font-weight:600}
+  details{margin-top:10px}
+  summary{cursor:pointer;color:var(--dim);font-size:12px;text-transform:uppercase;letter-spacing:.08em}
+  .calRow{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:12px}
+  .pill{font-size:11px;padding:2px 8px;border-radius:10px;border:1px solid var(--line);color:var(--dim)}
+  .pill.done{border-color:var(--amb);color:var(--amb)}
+  @media (max-width:560px){ body{padding:12px} .cell{border-radius:2px} .beacon .lamp{width:36px;height:36px} }
+</style>
+</head>
+<body>
+
+<h1>BEATBOX LAB <span class="tag">/ mic → onsets → clasificación → 16 steps → Strudel</span></h1>
+<p class="sub">Haz beatbox al micrófono: <b style="color:var(--bd)">boom/puh</b> = bd · <b style="color:var(--sd)">psh/ka</b> = sd · <b style="color:var(--hh)">ts/tss</b> = hh</p>
+
+<div class="panel">
+  <div class="row">
+    <div><label>Modo</label>
+      <select id="mode"><option value="metronome">Con metrónomo (BPM fijo)</option><option value="freestyle" selected>Freestyle (detectar BPM)</option></select>
+    </div>
+    <div><label>BPM</label><input type="number" id="bpm" value="90" min="50" max="200"></div>
+    <div><label>Compases</label>
+      <select id="bars"><option value="1">1</option><option value="2" selected>2</option></select>
+    </div>
+    <div id="metroWrap"><label>Metrónomo al grabar</label>
+      <select id="metroOn"><option value="1" selected>Sí (usa audífonos)</option><option value="0">No</option></select>
+    </div>
+    <div id="freeDurWrap"><label>Duración libre (s)</label><input type="number" id="freeDur" value="10" min="4" max="20"></div>
+    <div style="margin-left:auto;display:flex;gap:10px;flex-wrap:wrap">
+      <button id="armBtn" class="primary">● Armar micrófono</button>
+      <button id="pulseBtn" disabled>◎ Pulso libre</button>
+      <button id="ambBtn" class="amb" disabled>◆ Medir ambiente</button>
+      <button id="recBtn" class="rec" disabled>▶ Grabar</button>
+    </div>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <span class="pill" id="ambPill">ambiente: sin medir</span>
+    <span class="hint" style="margin:0">Recomendado: mide el ruido ambiente en silencio antes de grabar → el umbral se ajusta solo.</span>
+  </div>
+
+  <div class="status" id="status" style="margin-top:12px"><span class="dot"></span><span id="statusTxt">Presiona "Armar micrófono" para empezar.</span></div>
+
+  <div class="beacon" id="beacon">
+    <div class="lamp acc"></div><div class="lamp"></div><div class="lamp"></div><div class="lamp"></div>
+  </div>
+  <div class="beaconLbl" id="beaconLbl">las luces marcan la velocidad del compás antes de grabar</div>
+
+  <div class="energyWrap">
+    <label>Energía del micrófono — el detector está SIEMPRE activo: haz sonidos y verifica que el contador coincida con tus golpes antes de grabar</label>
+    <div class="energyBar" id="energyBar">
+      <div class="noiseZone" id="noiseZone"></div>
+      <div class="energyFill" id="energyFill"></div>
+      <div class="peakMark" id="peakMark"></div>
+      <div class="threshMark" id="threshMark"><div class="grip"></div></div>
+    </div>
+    <div class="energyLegend"><span>silencio</span><span style="color:var(--amb)">■ ruido</span><span style="color:var(--sd)">▮ umbral (arrastrable)</span><span style="color:var(--warn)">▮ último pico</span><span>fuerte</span></div>
+  </div>
+
+  <div class="stat">
+    <div>golpes detectados: <b id="hitCount" style="color:var(--ok);font-size:14px">0</b> <button id="resetCountBtn" style="padding:1px 7px;font-size:10px;margin-left:2px">reset</button></div>
+    <div>centroide: <b id="centVal">—</b></div>
+    <div>zcr: <b id="zcrVal">—</b></div>
+    <div>umbral actual: <b id="thVal">—</b></div>
+    <div>último golpe: <b id="lastHit">—</b></div>
+  </div>
+  <div id="eventLog"></div>
+</div>
+
+<div class="panel" id="analysisPanel" style="display:none">
+  <label style="margin-bottom:8px">Análisis de tempo — autocorrelación de la señal de ataques</label>
+  <div class="row" style="align-items:baseline;gap:20px">
+    <div style="font-size:22px;font-weight:600;color:var(--ok)"><span id="detBpm">—</span> <span style="font-size:12px;color:var(--dim);font-weight:400">BPM detectado</span></div>
+    <div style="font-size:12px;color:var(--dim)">confianza: <b id="detConf" style="color:var(--txt)">—</b></div>
+    <div style="font-size:12px;color:var(--dim)">repeticiones estimadas: <b id="detReps" style="color:var(--txt)">—</b></div>
+    <div style="margin-left:auto;display:flex;gap:8px">
+      <button id="halfBtn">½× tempo</button>
+      <button id="doubleBtn">2× tempo</button>
+      <button id="applyBpmBtn" class="primary">✓ Usar este BPM</button>
+    </div>
+  </div>
+  <canvas id="acCanvas" width="820" height="120" style="width:100%;height:120px;margin-top:10px;background:#080A10;border:1px solid var(--line);border-radius:6px"></canvas>
+  <p class="hint">El pico marcado es el pulso detectado. Si el ritmo se siente al doble o a la mitad, usa <b>½×</b> / <b>2×</b>. La votación entre repeticiones filtró los golpes sueltos automáticamente.</p>
+</div>
+
+<div class="panel">
+  <label style="margin-bottom:8px">Patrón cuantizado (16 steps × compás) — clic en las celdas para editar</label>
+  <div id="gridWrap"></div>
+  <div class="row" style="margin-top:12px">
+    <button id="playBtn" disabled>▶ Escuchar patrón</button>
+    <label style="display:flex;align-items:center;gap:6px;margin:0;text-transform:none;letter-spacing:0;font-size:13px;color:var(--txt);cursor:pointer">
+      <input type="checkbox" id="loopChk" style="accent-color:var(--hh);width:16px;height:16px;cursor:pointer"> loop
+    </label>
+    <button id="clearBtn">✕ Limpiar</button>
+    <button id="copyBtn" disabled>⧉ Copiar código Strudel</button>
+  </div>
+  <pre id="codeOut">// graba un ritmo para generar el código</pre>
+  <p class="hint">Pega el código en <b>strudel.cc</b>. También expone <b>window.lastPattern</b> (arrays de 16×compases por instrumento).</p>
+</div>
+
+<div class="panel">
+  <details>
+    <summary>Calibración de heurísticas</summary>
+    <div class="calRow">
+      <div><label>Sensibilidad (k · desviación)</label><input type="range" id="thresh" min="2" max="12" step="0.2" value="5"> <span id="threshVal">5</span></div>
+      <div><label>Refractario (ms)</label><input type="range" id="refract" min="50" max="200" step="5" value="90"> <span id="refractVal">90</span></div>
+      <div><label>Caída para confirmar golpe (%)</label><input type="range" id="decayConf" min="50" max="90" step="5" value="70"> <span id="decayConfVal">70</span></div>
+      <div><label>Corte bd (Hz)</label><input type="range" id="bdCut" min="500" max="2500" step="50" value="1300"> <span id="bdCutVal">1300</span></div>
+      <div><label>Corte hh (Hz)</label><input type="range" id="hhCut" min="3000" max="8000" step="100" value="4600"> <span id="hhCutVal">4600</span></div>
+    </div>
+    <p class="hint">Un golpe se marca cuando el sonido <b>cruza el umbral, alcanza un máximo y empieza a devolverse</b> (caída confirmada durante 2 frames). Mientras no baje por debajo del umbral no se marca otro golpe, así un sonido largo cuenta una sola vez. El sistema estima el ruido de fondo en vivo y sube el umbral solo si hace falta. Clasificación: centroide &lt; corte bd → <b>bd</b> · centroide &gt; corte hh o ZCR alto → <b>hh</b> · resto → <b>sd</b>.</p>
+  </details>
+</div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+let ctx=null, analyser=null, micStream=null, worklet=null;
+let armed=false, recording=false, measuringAmb=false;
+
+let ambMean=0.004, ambStd=0.001, ambMeasured=false;
+let ambSamples=[];
+
+let recStart=0, recEnd=0, stepDur=0, totalSteps=16;
+let pattern={bd:[],sd:[],hh:[]};
+let curThresh=0.015, env=0;
+
+// --- detector de onsets por PICO (ataque → máximo → decaimiento confirmado) ---
+const ENV_REL=0.70;      // liberación de la envolvente (ataque es instantáneo)
+const DECAY_FRAMES=2;    // frames consecutivos cayendo para confirmar el pico
+const PEAK_MARGIN=1.25;  // el pico debe superar el umbral con margen, no rozarlo
+const FLOOR_K=4;         // umbral de seguridad = piso + K·desviación
+const MAX_RISE=0.25;     // s: si el sonido no decae, cerrar igual (sonido sostenido)
+const MAX_REFRACT=0.40;  // s: escape de seguridad, nunca quedar atrapado
+const REL_RATIO=0.6;     // histéresis: debe bajar a este % del umbral para re-armar
+let nFloor=0.004, nDev=0.0008;   // piso de ruido continuo (seguidor de mínimo)
+let prevEnv=0;                   // envolvente del frame anterior (para detectar subida)
+let peakHold=0, hitCount=0;
+const ONSET={state:'idle', peak:0, attackT:0, valley:Infinity, dFrames:0, lastEmitT:-1e9, feat:null};
+
+// --- estado modo freestyle (detección de tempo) ---
+let mode='freestyle';
+let freeRecording=false;
+let noveltyEnv=[];      // tren de impulsos de onsets confirmados (por frame)
+let freeT0=0;           // tiempo audio de inicio de captura
+let frameDur=0.01067;   // se recalcula con sampleRate real
+let freeOnsets=[];      // {t, lane}
+let lastAnalysis=null;  // resultado del análisis para recuantizar con ½× / 2×
+
+const FFT=2048;
+const freqBuf=new Uint8Array(FFT/2);
+const timeBuf=new Float32Array(FFT);
+
+const RMS_FULL=0.08;
+const toPct = r => Math.min(100, (r/RMS_FULL)*100);
+
+function setStatus(txt, cls=''){ $('status').className='status '+cls; $('statusTxt').textContent=txt; }
+function logEvent(cls,label,t,cent,zcr){
+  const el=$('eventLog');
+  el.innerHTML='<div>['+t.toFixed(3)+'s] <b class="'+cls+'">'+label+'</b> · '+Math.round(cent)+'Hz · zcr '+zcr.toFixed(2)+'</div>'+el.innerHTML;
+  $('lastHit').innerHTML='<span class="c'+cls+'">'+label+'</span>';
+}
+
+function buildGrid(){
+  totalSteps=16*parseInt($('bars').value);
+  for(const k of ['bd','sd','hh']) pattern[k]=new Array(totalSteps).fill(false);
+  renderGrid();
+}
+function renderGrid(){
+  const wrap=$('gridWrap'); wrap.innerHTML='';
+  const bars=totalSteps/16;
+  for(let b=0;b<bars;b++){
+    const lanes=document.createElement('div'); lanes.className='lanes';
+    for(const k of ['bd','sd','hh']){
+      const lab=document.createElement('div'); lab.className='laneLabel '+k; lab.textContent=k; lanes.appendChild(lab);
+      for(let s=0;s<16;s++){
+        const i=b*16+s;
+        const c=document.createElement('div');
+        c.className='cell '+k+(pattern[k][i]?' on':''); c.dataset.beat=s%4; c.dataset.lane=k; c.dataset.idx=i;
+        c.addEventListener('click',()=>{ pattern[k][i]=!pattern[k][i]; c.classList.toggle('on'); emitCode(); });
+        lanes.appendChild(c);
+      }
+    }
+    wrap.appendChild(lanes);
+    const st=document.createElement('div'); st.className='steps'; st.innerHTML='<span></span>';
+    for(let s=0;s<16;s++) st.innerHTML+='<span>'+(s%4===0?(s/4+1):'·')+'</span>';
+    wrap.appendChild(st);
+  }
+}
+function markCell(lane,idx){ const c=document.querySelector('.cell[data-lane="'+lane+'"][data-idx="'+idx+'"]'); if(c) c.classList.add('on'); }
+
+async function arm(){
+  try{
+    ctx=new (window.AudioContext||window.webkitAudioContext)();
+    micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+    const src=ctx.createMediaStreamSource(micStream);
+    analyser=ctx.createAnalyser(); analyser.fftSize=FFT; analyser.smoothingTimeConstant=0;
+    src.connect(analyser);
+    worklet=ctx.createScriptProcessor(512,1,1);
+    src.connect(worklet); worklet.connect(ctx.destination);
+    worklet.onaudioprocess=onFrame;
+    armed=true; $('armBtn').disabled=true; $('ambBtn').disabled=false; $('recBtn').disabled=false; $('pulseBtn').disabled=false;
+    updateThreshDisplay();
+    setStatus('Micrófono armado. Mide el ambiente (recomendado) o graba directamente.','');
+  }catch(e){ setStatus('No se pudo acceder al micrófono: '+e.message,''); }
+}
+
+let manualThresh=null; // si el usuario arrastra la línea, este valor manda
+function computeThreshold(){
+  if(manualThresh!==null) return manualThresh;
+  const k=parseFloat($('thresh').value);
+  const adaptive = ambMean + k*ambStd;
+  return ambMeasured ? Math.max(adaptive, 0.006) : 0.015;
+}
+function updateThreshDisplay(){
+  curThresh=computeThreshold();
+  $('thVal').textContent=curThresh.toFixed(4)+(manualThresh!==null?' (manual)':'');
+  updateMeters(env);
+}
+// umbral efectivo: nunca por debajo del ruido real medido en vivo
+function effThreshold(){ return Math.max(curThresh, nFloor + FLOOR_K*nDev); }
+
+function updateMeters(e){
+  const th=effThreshold();
+  const fill=$('energyFill');
+  fill.style.width=toPct(e)+'%';
+  fill.classList.toggle('over', e>th);
+  $('threshMark').style.left=toPct(th)+'%';
+  $('noiseZone').style.width=toPct(nFloor+FLOOR_K*nDev)+'%';
+  if(peakHold>0) $('peakMark').style.left=toPct(peakHold)+'%';
+}
+
+function onFrame(ev){
+  const buf=ev.inputBuffer.getChannelData(0);
+  let sum=0; for(let i=0;i<buf.length;i++) sum+=buf[i]*buf[i];
+  const rms=Math.sqrt(sum/buf.length);
+  const t=ctx.currentTime;
+
+  // envolvente: ataque instantáneo + liberación suave.
+  // Así el decaimiento es monótono y el "pico" es inequívoco.
+  env = rms>env ? rms : ENV_REL*env + (1-ENV_REL)*rms;
+
+  if(measuringAmb){ ambSamples.push(rms); }
+
+  // piso de ruido continuo — seguidor de MÍNIMO: los golpes nunca lo contaminan
+  if(env<nFloor) nFloor=0.90*nFloor+0.10*env; else nFloor*=1.0006;
+  if(env<nFloor*2.2) nDev=0.99*nDev+0.01*Math.abs(env-nFloor);
+
+  updateMeters(env);
+  if(freeRecording) noveltyEnv.push(0);   // se rellena al confirmar cada onset
+  if(!measuringAmb) detectOnset(t, env);
+  prevEnv=env;
+}
+
+// --------- máquina de estados de detección de golpes ---------
+// idle → (cruza umbral) → rising → (alcanza máximo y decae) → confirma → refractory
+//   → (baja lo suficiente) → idle.  Las idas y vueltas pequeñas nunca confirman.
+function detectOnset(t, e){
+  const th=effThreshold();
+  const refractS=parseFloat($('refract').value)/1000;
+  const decayConf=parseFloat($('decayConf').value)/100;
+
+  if(ONSET.state==='idle'){
+    if(e<ONSET.valley) ONSET.valley=e;
+    // un ataque real SUBE. Sobre la cola de un sonido anterior la envolvente
+    // baja, así que nunca se confunde el decaimiento con un golpe nuevo.
+    if(e>th && e>prevEnv){ ONSET.state='rising'; ONSET.attackT=t; ONSET.peak=e; ONSET.dFrames=0; ONSET.feat=grabFeatures(); }
+  }
+  else if(ONSET.state==='rising'){
+    if(e>=ONSET.peak){                      // sigue subiendo: actualizar máximo
+      ONSET.peak=e; ONSET.dFrames=0; ONSET.feat=grabFeatures();
+    } else if(e < ONSET.peak*decayConf){    // empezó a devolverse de verdad
+      if(++ONSET.dFrames>=DECAY_FRAMES) confirmOnset(th, refractS);
+    } else ONSET.dFrames=0;                 // meseta / temblor: no confirma
+    if(ONSET.state==='rising' && (t-ONSET.attackT)>MAX_RISE) confirmOnset(th, refractS);
+  }
+  else { // refractory — histéresis: hay que bajar para poder marcar otro golpe
+    if(e<th*REL_RATIO || e<ONSET.peak*0.35 || (t-ONSET.attackT)>MAX_REFRACT){
+      ONSET.state='idle'; ONSET.valley=e;
+    }
+  }
+}
+
+function confirmOnset(th, refractS){
+  const valley = ONSET.valley===Infinity ? nFloor : ONSET.valley;
+  const prominence = ONSET.peak - valley;
+  const bigEnough  = ONSET.peak >= th*PEAK_MARGIN;   // supera el umbral con margen
+  const notNoise   = prominence >= 3*nDev;           // subió mucho más que el temblor
+  const spaced     = (ONSET.attackT-ONSET.lastEmitT) > refractS;
+  if(bigEnough && notNoise && spaced){
+    emitOnset(ONSET.attackT, ONSET.peak, ONSET.feat);
+    ONSET.lastEmitT=ONSET.attackT;
+    ONSET.state='refractory';        // solo un golpe REAL abre el refractario
+  } else {
+    // candidato descartado: volver a escuchar de inmediato, para no tragarse
+    // el golpe verdadero que venga justo después
+    ONSET.state='idle'; ONSET.valley=ONSET.peak;
+  }
+}
+
+// características espectrales del instante actual (se capturan en el pico)
+function grabFeatures(){
+  analyser.getByteFrequencyData(freqBuf);
+  analyser.getFloatTimeDomainData(timeBuf);
+  const binHz=ctx.sampleRate/FFT;
+  let num=0,den=0;
+  for(let i=1;i<freqBuf.length;i++){ const m=freqBuf[i]; num+=m*i*binHz; den+=m; }
+  const centroid=den>0?num/den:0;
+  let zc=0; for(let i=1;i<timeBuf.length;i++) if((timeBuf[i-1]<0)!==(timeBuf[i]<0)) zc++;
+  return {centroid, zcr:zc/timeBuf.length};
+}
+
+// un golpe confirmado: clasificar y registrar. t = instante del ATAQUE (no del pico).
+function emitOnset(t, peak, feat){
+  const centroid=feat?feat.centroid:0, zcr=feat?feat.zcr:0;
+  const bdCut=parseFloat($('bdCut').value), hhCut=parseFloat($('hhCut').value);
+  let lane;
+  if(centroid<bdCut && zcr<0.15) lane='bd';
+  else if(centroid>hhCut || zcr>0.35) lane='hh';
+  else lane='sd';
+
+  hitCount++; peakHold=peak;
+  $('hitCount').textContent=hitCount;
+  $('centVal').textContent=Math.round(centroid)+' Hz';
+  $('zcrVal').textContent=zcr.toFixed(2);
+  $('energyBar').classList.remove('flash'); void $('energyBar').offsetWidth; $('energyBar').classList.add('flash');
+  logEvent(lane,lane.toUpperCase(),t,centroid,zcr);
+
+  if(recording && t>=recStart && t<recEnd){
+    const idx=Math.round((t-recStart)/stepDur) % totalSteps;
+    pattern[lane][idx]=true; markCell(lane,idx);
+  }
+  if(freeRecording){
+    freeOnsets.push({t, lane, peak});
+    const idx=Math.round((t-freeT0)/frameDur);
+    if(idx>=0 && idx<noveltyEnv.length) noveltyEnv[idx]=Math.max(noveltyEnv[idx], peak);
+    litLamp({bd:0,sd:1,hh:2}[lane]);
+  }
+}
+
+function measureAmbient(){
+  if(!armed) return;
+  ambSamples=[]; measuringAmb=true;
+  $('ambBtn').disabled=true; $('recBtn').disabled=true;
+  let secs=2.0;
+  setStatus('Midiendo ruido ambiente… quédate en SILENCIO ('+secs.toFixed(1)+'s)','amb');
+  const iv=setInterval(()=>{ secs-=0.1; if(secs>0) setStatus('Midiendo ruido ambiente… SILENCIO ('+secs.toFixed(1)+'s)','amb'); },100);
+  setTimeout(()=>{
+    clearInterval(iv); measuringAmb=false;
+    const n=ambSamples.length||1;
+    ambMean=ambSamples.reduce((a,b)=>a+b,0)/n;
+    ambStd=Math.sqrt(ambSamples.reduce((a,b)=>a+(b-ambMean)*(b-ambMean),0)/n) || 0.001;
+    ambMeasured=true;
+    updateThreshDisplay();
+    $('ambPill').textContent='ambiente: μ '+ambMean.toFixed(4)+' · σ '+ambStd.toFixed(4);
+    $('ambPill').className='pill done';
+    $('ambBtn').disabled=false; $('recBtn').disabled=false;
+    setStatus('Ambiente medido. El umbral (línea rosa) se ajustó al ruido de tu entorno. Ya puedes grabar.','');
+  },2000);
+}
+
+function click(at,accent){
+  const o=ctx.createOscillator(), g=ctx.createGain();
+  o.frequency.value=accent?1568:1046; g.gain.setValueAtTime(accent?0.5:0.25,at);
+  g.gain.exponentialRampToValueAtTime(0.001,at+0.05);
+  o.connect(g); g.connect(ctx.destination); o.start(at); o.stop(at+0.06);
+}
+
+const lamps=()=>Array.from($('beacon').children);
+function litLamp(i){
+  lamps().forEach(l=>l.classList.remove('hot'));
+  const l=lamps()[i]; l.classList.add('hot');
+  setTimeout(()=>{ if(l) l.classList.remove('hot'); },120);
+}
+
+// ============================================================
+//  MODO FREESTYLE: grabar libre + detectar BPM y patrón
+// ============================================================
+function recordFreestyle(){
+  if(!armed) return;
+  buildGrid(); emitCode(); updateThreshDisplay();
+  $('analysisPanel').style.display='none';
+  noveltyEnv=[]; freeOnsets=[];
+  hitCount=0; $('hitCount').textContent='0';
+  ONSET.state='idle'; ONSET.valley=Infinity; ONSET.lastEmitT=-1e9;
+  frameDur=512/ctx.sampleRate;
+  const dur=Math.max(4,Math.min(20,parseFloat($('freeDur').value)||10));
+
+  // count-in NEUTRO: 3 flashes lentos (1s) que solo dicen "prepárate/ya",
+  // sin imponer tempo — el usuario define su propio pulso.
+  recording=false;
+  $('recBtn').disabled=true; $('ambBtn').disabled=true; $('pulseBtn').disabled=true;
+  let cd=3;
+  setStatus('Prepárate… empieza a repetir tu ritmo cuando las luces se apaguen.','count');
+  $('beaconLbl').textContent='cuenta neutra (no marca tu tempo) — tú defines el pulso';
+  const cdTick=()=>{
+    if(cd>0){ lamps().forEach(l=>l.classList.add('hot')); setTimeout(()=>lamps().forEach(l=>l.classList.remove('hot')),300); cd--; setTimeout(cdTick,1000); }
+    else startFreeCapture(dur);
+  };
+  cdTick();
+}
+function startFreeCapture(dur){
+  freeT0=ctx.currentTime;
+  freeRecording=true;
+  setStatus('● GRABANDO LIBRE — repite tu patrón 3-4 veces ('+dur+'s)','live');
+  $('beaconLbl').textContent='las luces destellan con cada golpe detectado (bd/sd/hh)';
+  // barra de progreso simple vía status
+  let left=dur;
+  const iv=setInterval(()=>{ left-=0.5; if(left>0) setStatus('● GRABANDO LIBRE — repite tu patrón ('+left.toFixed(1)+'s)','live'); },500);
+  setTimeout(()=>{
+    clearInterval(iv);
+    freeRecording=false;
+    $('recBtn').disabled=false; $('ambBtn').disabled=false; $('pulseBtn').disabled=false;
+    lamps().forEach(l=>l.classList.remove('hot'));
+    $('beaconLbl').textContent='las luces marcan la velocidad del compás antes de grabar';
+    analyzeFreestyle();
+  }, dur*1000);
+}
+
+// ---- autocorrelación + estimación de tempo, loop y fase ----
+function autocorrAt(nov, lag){
+  let s=0,c=0;
+  for(let i=0;i+lag<nov.length;i++){ s+=nov[i]*nov[i+lag]; c++; }
+  return c?s/c:0;
+}
+// comb filter: puntúa un beat-lag sumando autocorrelación en sus múltiplos,
+// con pesos que refuerzan el compás (m=4) y los 2 compases (m=8).
+const COMB_W=[1.0, 0.9, 0.5, 0.85, 0.4, 0.4, 0.3, 0.6];
+function combScore(nov, beatLag){
+  let s=0;
+  for(let m=1;m<=8;m++) s += autocorrAt(nov, Math.round(beatLag*m)) * COMB_W[m-1];
+  return s;
+}
+function analyzeFreestyle(){
+  if(freeOnsets.length<3 || noveltyEnv.length<20){
+    setStatus('Muy pocos golpes para detectar tempo. Intenta de nuevo repitiendo el patrón varias veces.','');
+    return;
+  }
+  // suavizar el tren de impulsos: tolera ±2 frames de jitter en la autocorrelación
+  const K=[0.25,0.6,1,0.6,0.25];
+  const nov=new Array(noveltyEnv.length).fill(0);
+  for(let i=0;i<noveltyEnv.length;i++){
+    const v=noveltyEnv[i];
+    if(v>0) for(let k=-2;k<=2;k++){ const j=i+k; if(j>=0&&j<nov.length) nov[j]+=v*K[k+2]; }
+  }
+  const bpmMin=60, bpmMax=180;
+  const lagMin=Math.floor((60/bpmMax)/frameDur);
+  const lagMax=Math.ceil((60/bpmMin)/frameDur);
+  const prefCenter=110, prefWidth=0.5; // preferencia perceptual (mitiga octava)
+  const raw=[], weighted=[];
+  let best=lagMin, bestVal=-1;
+  for(let lag=lagMin;lag<=lagMax;lag++){
+    const bpm=60/(lag*frameDur);
+    const w=Math.exp(-Math.pow(Math.log(bpm/prefCenter)/prefWidth,2)/2);
+    const sc=combScore(nov,lag)*w;
+    raw[lag]=autocorrAt(nov,lag); weighted[lag]=sc;
+    if(sc>bestVal){ bestVal=sc; best=lag; }
+  }
+  // interpolación parabólica sub-frame en el pico
+  let lagStar=best;
+  if(best>lagMin && best<lagMax){
+    const y0=weighted[best-1], y1=weighted[best], y2=weighted[best+1];
+    const denom=(y0-2*y1+y2);
+    if(denom!==0) lagStar = best + 0.5*(y0-y2)/denom;
+  }
+  const beatPeriod=lagStar*frameDur;
+  let bpm=60/beatPeriod;
+
+  // confianza: contraste del pico del comb frente a la media del rango
+  let sum=0,cnt=0; for(let l=lagMin;l<=lagMax;l++){ sum+=weighted[l]; cnt++; }
+  const meanW=sum/cnt;
+  const conf=Math.max(0,Math.min(1,(bestVal-meanW)/(bestVal+1e-6)));
+
+  // longitud de loop: 1 vs 2 compases (asumiendo 4/4)
+  const lag4=Math.round(lagStar*4), lag8=Math.round(lagStar*8);
+  let bars=1;
+  if(lag8<nov.length*0.85){
+    const ac4=autocorrAt(nov,lag4), ac8=autocorrAt(nov,lag8);
+    if(ac8>0.88*ac4) bars=2;
+  }
+
+  lastAnalysis={ bpm, beatPeriod, bars, conf };
+  applyAnalysis();
+  drawAutocorr(raw, weighted, lagMin, lagMax, best);
+  $('analysisPanel').style.display='block';
+  setStatus('Tempo detectado: '+Math.round(bpm)+' BPM · '+bars+' compás(es). Ajusta con ½× / 2× si el pulso se siente distinto.','');
+}
+
+// cuantiza freeOnsets al grid usando lastAnalysis, con votación entre repeticiones
+function applyAnalysis(){
+  if(!lastAnalysis) return;
+  const {beatPeriod, bars} = lastAnalysis;
+  const bpm=lastAnalysis.bpm;
+  const stepD=beatPeriod/4;
+  const total=16*bars;
+  const loopDur=total*stepD;
+
+  // buscar la fase φ (offset dentro de un step) que minimiza error de cuantización
+  let bestPhi=0, bestErr=Infinity;
+  const N=24;
+  for(let p=0;p<N;p++){
+    const phi=(p/N)*stepD;
+    let err=0;
+    for(const o of freeOnsets){
+      const x=(o.t-freeT0-phi)/stepD;
+      err+=Math.abs(x-Math.round(x));
+    }
+    if(err<bestErr){ bestErr=err; bestPhi=phi; }
+  }
+
+  // votación: contar golpes por (lane, step) plegando módulo el loop
+  const votes={bd:{},sd:{},hh:{}};
+  let spanStart=Infinity, spanEnd=-Infinity;
+  for(const o of freeOnsets){
+    const g=Math.round((o.t-freeT0-bestPhi)/stepD);
+    const step=((g%total)+total)%total;
+    votes[o.lane][step]=(votes[o.lane][step]||0)+1;
+    spanStart=Math.min(spanStart,o.t); spanEnd=Math.max(spanEnd,o.t);
+  }
+  const nReps=Math.max(1, Math.round((spanEnd-spanStart)/loopDur));
+  const voteThresh=Math.max(1, Math.ceil(nReps/2)); // aparece en ≥ mitad de las repeticiones
+
+  // construir patrón
+  $('bars').value=String(bars);
+  totalSteps=total;
+  for(const k of ['bd','sd','hh']) pattern[k]=new Array(total).fill(false);
+  for(const k of ['bd','sd','hh'])
+    for(const step in votes[k])
+      if(votes[k][step]>=voteThresh) pattern[k][+step]=true;
+
+  // rotar para que el downbeat (step 0) caiga en un kick, si hay
+  const firstBd=pattern.bd.findIndex(v=>v);
+  if(firstBd>0){
+    const beatAlignedShift = firstBd - (firstBd % 4); // alinear al beat más cercano hacia atrás
+    if(beatAlignedShift>0){
+      for(const k of ['bd','sd','hh']){
+        const a=pattern[k];
+        pattern[k]=a.slice(beatAlignedShift).concat(a.slice(0,beatAlignedShift));
+      }
+    }
+  }
+
+  $('bpm').value=String(Math.round(bpm));
+  $('detBpm').textContent=Math.round(bpm);
+  $('detConf').textContent=Math.round((lastAnalysis.conf||0)*100)+'%';
+  $('detReps').textContent=nReps;
+  renderGrid();
+  // remarcar celdas activas
+  for(const k of ['bd','sd','hh']) pattern[k].forEach((v,i)=>{ if(v) markCell(k,i); });
+  emitCode();
+  $('playBtn').disabled=false; $('copyBtn').disabled=false;
+}
+function rescaleTempo(factor){
+  if(!lastAnalysis) return;
+  lastAnalysis.beatPeriod/=factor;      // 2× tempo => beat más corto
+  lastAnalysis.bpm*=factor;
+  applyAnalysis();
+  // redibujar marca (recalcular pico aprox no crítico); solo actualizar texto BPM ya hecho
+  setStatus('Tempo ajustado a '+Math.round(lastAnalysis.bpm)+' BPM.','');
+}
+
+// ---- visualización de la autocorrelación ----
+function drawAutocorr(raw, weighted, lagMin, lagMax, peakLag){
+  const cv=$('acCanvas'), g=cv.getContext('2d');
+  const W=cv.width, H=cv.height;
+  g.clearRect(0,0,W,H);
+  const n=lagMax-lagMin;
+  let maxv=0; for(let l=lagMin;l<=lagMax;l++) maxv=Math.max(maxv,weighted[l]||0);
+  maxv=maxv||1;
+  const x=l=>((l-lagMin)/n)*W;
+  const y=v=>H-6-(v/maxv)*(H-16);
+  // curva cruda (tenue)
+  g.strokeStyle='rgba(92,207,230,.25)'; g.beginPath();
+  for(let l=lagMin;l<=lagMax;l++){ const px=x(l),py=y(raw[l]||0); l===lagMin?g.moveTo(px,py):g.lineTo(px,py); }
+  g.stroke();
+  // curva pesada (fuerte)
+  g.strokeStyle='#5CCFE6'; g.lineWidth=2; g.beginPath();
+  for(let l=lagMin;l<=lagMax;l++){ const px=x(l),py=y(weighted[l]||0); l===lagMin?g.moveTo(px,py):g.lineTo(px,py); }
+  g.stroke(); g.lineWidth=1;
+  // marcar pico
+  const pxp=x(peakLag);
+  g.strokeStyle='#7FD962'; g.beginPath(); g.moveTo(pxp,4); g.lineTo(pxp,H-4); g.stroke();
+  g.fillStyle='#7FD962'; g.font='11px monospace';
+  const bpmPeak=Math.round(60/(peakLag*frameDur));
+  g.fillText(bpmPeak+' BPM', Math.min(W-56,pxp+4), 14);
+  // ejes BPM
+  g.fillStyle='#5C6880'; g.font='9px monospace';
+  [180,120,90,60].forEach(b=>{ const lag=(60/b)/frameDur; if(lag>=lagMin&&lag<=lagMax){ const px=x(lag); g.fillText(b, px-6, H-2); } });
+}
+
+function record(){
+  if(!armed) return;
+  buildGrid(); emitCode(); updateThreshDisplay();
+  hitCount=0; $('hitCount').textContent='0';
+  ONSET.state='idle'; ONSET.valley=Infinity; ONSET.lastEmitT=-1e9;
+  const bpm=parseFloat($('bpm').value), bars=parseInt($('bars').value);
+  const beatDur=60/bpm; stepDur=beatDur/4;
+  const metroDuring=$('metroOn').value==='1';
+
+  const countBeats=8;
+  const t0=ctx.currentTime+0.2;
+  recStart=t0+countBeats*beatDur;
+  recEnd=recStart+bars*16*stepDur;
+
+  recording=true; $('recBtn').disabled=true; $('ambBtn').disabled=true;
+  setStatus('Preparación — sigue las luces para sentir el tempo…','count');
+  $('beaconLbl').textContent='① prepárate con las luces  →  ② al ponerse verdes: GRABA';
+
+  for(let i=0;i<countBeats;i++){
+    const at=t0+i*beatDur;
+    const accent=(i%4===0);
+    const delay=Math.max(0,(at-ctx.currentTime)*1000);
+    setTimeout(()=>litLamp(i%4), delay);
+    if(i>=4) click(at,accent);
+  }
+  if(metroDuring) for(let b=0;b<bars*4;b++) click(recStart+b*beatDur,b%4===0);
+
+  const toRec=Math.max(0,(recStart-ctx.currentTime)*1000);
+  setTimeout(()=>{ setStatus('● GRABANDO — '+bars+' compás(es) a '+bpm+' BPM','live'); $('beaconLbl').textContent='GRABANDO'; animatePlayhead(recStart); },toRec);
+  setTimeout(()=>{
+    recording=false; $('recBtn').disabled=false; $('ambBtn').disabled=false; clearPlayhead();
+    lamps().forEach(l=>l.classList.remove('hot'));
+    $('beaconLbl').textContent='las luces marcan la velocidad del compás antes de grabar';
+    setStatus('Listo. Revisa el patrón, edítalo, escúchalo o copia el código.','');
+    emitCode(); $('playBtn').disabled=false; $('copyBtn').disabled=false;
+  },Math.max(0,(recEnd-ctx.currentTime)*1000)+80);
+}
+
+let phRAF=null;
+function animatePlayhead(start){
+  cancelAnimationFrame(phRAF);
+  const loop=()=>{
+    const t=ctx.currentTime;
+    document.querySelectorAll('.cell.playhead').forEach(c=>c.classList.remove('playhead'));
+    if(t>=start&&t<recEnd){
+      const idx=Math.floor((t-start)/stepDur)%totalSteps;
+      document.querySelectorAll('.cell[data-idx="'+idx+'"]').forEach(c=>c.classList.add('playhead'));
+      phRAF=requestAnimationFrame(loop);
+    }
+  }; loop();
+}
+function clearPlayhead(){ cancelAnimationFrame(phRAF); document.querySelectorAll('.cell.playhead').forEach(c=>c.classList.remove('playhead')); }
+
+function laneToStruct(arr){ return arr.map(v=> v?'x':'~').join(' '); }
+function emitCode(){
+  const bpm=parseFloat($('bpm').value), bars=parseInt($('bars').value);
+  const seg=k=>{
+    if(bars===1) return laneToStruct(pattern[k]);
+    const b1=laneToStruct(pattern[k].slice(0,16)), b2=laneToStruct(pattern[k].slice(16));
+    return '<['+b1+'] ['+b2+']>';
+  };
+  const code=
+'setcpm('+bpm+'/4)\n'+
+'stack(\n'+
+'  s("bd").struct("'+seg('bd')+'"),\n'+
+'  s("sd").struct("'+seg('sd')+'"),\n'+
+'  s("hh").struct("'+seg('hh')+'")\n'+
+')';
+  $('codeOut').textContent=code;
+  window.lastPattern={bpm,bars,steps:totalSteps,bd:[...pattern.bd],sd:[...pattern.sd],hh:[...pattern.hh],ambient:{mean:ambMean,std:ambStd,measured:ambMeasured}};
+}
+
+function synthHit(k,at){
+  if(k==='bd'){ const o=ctx.createOscillator(),g=ctx.createGain();
+    o.frequency.setValueAtTime(150,at); o.frequency.exponentialRampToValueAtTime(45,at+0.12);
+    g.gain.setValueAtTime(0.9,at); g.gain.exponentialRampToValueAtTime(0.001,at+0.15);
+    o.connect(g);g.connect(ctx.destination);o.start(at);o.stop(at+0.16); return; }
+  const len=Math.floor(ctx.sampleRate*0.12), nb=ctx.createBuffer(1,len,ctx.sampleRate), d=nb.getChannelData(0);
+  for(let i=0;i<len;i++) d[i]=Math.random()*2-1;
+  const src=ctx.createBufferSource(); src.buffer=nb;
+  const f=ctx.createBiquadFilter(), g=ctx.createGain();
+  if(k==='sd'){ f.type='bandpass'; f.frequency.value=1800; f.Q.value=0.8; g.gain.setValueAtTime(0.5,at); g.gain.exponentialRampToValueAtTime(0.001,at+0.12); }
+  else { f.type='highpass'; f.frequency.value=7000; g.gain.setValueAtTime(0.3,at); g.gain.exponentialRampToValueAtTime(0.001,at+0.05); }
+  src.connect(f);f.connect(g);g.connect(ctx.destination);src.start(at);src.stop(at+0.13);
+}
+let loopTimer=null, isPlaying=false;
+function stopPlayback(){
+  isPlaying=false;
+  clearTimeout(loopTimer); loopTimer=null;
+  clearPlayhead();
+  $('playBtn').textContent='▶ Escuchar patrón';
+  $('playBtn').classList.remove('pulsing');
+}
+function playOnce(){
+  const bpm=parseFloat($('bpm').value); const sd=60/bpm/4;
+  const start=ctx.currentTime+0.06;
+  for(let i=0;i<totalSteps;i++) for(const k of ['bd','sd','hh']) if(pattern[k][i]) synthHit(k,start+i*sd);
+  recEnd=start+totalSteps*sd; stepDur=sd; animatePlayhead(start);
+  return totalSteps*sd;
+}
+function playPattern(){
+  if(!ctx) return;
+  if(isPlaying){ stopPlayback(); return; }
+  isPlaying=true;
+  $('playBtn').textContent='■ Detener';
+  $('playBtn').classList.add('pulsing');
+  const schedule=()=>{
+    const dur=playOnce();
+    loopTimer=setTimeout(()=>{
+      if(isPlaying && $('loopChk').checked) schedule();
+      else stopPlayback();
+    }, dur*1000);
+  };
+  schedule();
+}
+
+// ---------- pulso libre (metrónomo de calentamiento, no graba) ----------
+let pulseTimer=null, pulseOn=false, pulseBeat=0;
+function togglePulse(){
+  if(!armed) return;
+  if(pulseOn){ stopPulse(); return; }
+  pulseOn=true; pulseBeat=0;
+  $('pulseBtn').classList.add('pulsing'); $('pulseBtn').textContent='◉ Detener pulso';
+  $('beaconLbl').textContent='pulso libre — calibra tus sonidos al tempo (no está grabando)';
+  const bpm=parseFloat($('bpm').value);
+  const beatMs=60000/bpm;
+  const tick=()=>{
+    const accent=(pulseBeat%4===0);
+    // enciende TODOS los círculos a la vez como referencia clara
+    lamps().forEach(l=>{ l.classList.add('pulse'); if(accent) l.style.filter='brightness(1.3)'; });
+    setTimeout(()=>lamps().forEach(l=>{ l.classList.remove('pulse'); l.style.filter=''; }), Math.min(140,beatMs*0.5));
+    if(ctx) click(ctx.currentTime, accent);
+    pulseBeat++;
+  };
+  tick();
+  pulseTimer=setInterval(tick, beatMs);
+}
+function stopPulse(){
+  pulseOn=false; clearInterval(pulseTimer); pulseTimer=null;
+  lamps().forEach(l=>{ l.classList.remove('pulse'); l.style.filter=''; });
+  $('pulseBtn').classList.remove('pulsing'); $('pulseBtn').textContent='◎ Pulso libre';
+  $('beaconLbl').textContent='las luces marcan la velocidad del compás antes de grabar';
+}
+
+// ---------- arrastrar el umbral rojo ----------
+function pctToRms(pct){ return (pct/100)*RMS_FULL; }
+function setThreshFromClientX(clientX){
+  const rect=$('energyBar').getBoundingClientRect();
+  let pct=((clientX-rect.left)/rect.width)*100;
+  pct=Math.max(0,Math.min(100,pct));
+  manualThresh=Math.max(0.001, pctToRms(pct));
+  updateThreshDisplay();
+}
+let dragging=false;
+$('threshMark').addEventListener('pointerdown',e=>{ dragging=true; $('threshMark').classList.add('dragging'); $('threshMark').setPointerCapture(e.pointerId); e.preventDefault(); });
+window.addEventListener('pointermove',e=>{ if(dragging) setThreshFromClientX(e.clientX); });
+window.addEventListener('pointerup',()=>{ if(dragging){ dragging=false; $('threshMark').classList.remove('dragging'); } });
+// clic directo en la barra también mueve el umbral
+$('energyBar').addEventListener('pointerdown',e=>{ if(e.target.closest('.threshMark')) return; setThreshFromClientX(e.clientX); });
+$('energyBar').classList.add('grabbable');
+
+$('armBtn').addEventListener('click',arm);
+$('pulseBtn').addEventListener('click',togglePulse);
+$('ambBtn').addEventListener('click',measureAmbient);
+$('recBtn').addEventListener('click',()=>{ if(pulseOn) stopPulse(); if(isPlaying) stopPlayback(); if(mode==='freestyle') recordFreestyle(); else record(); });
+$('playBtn').addEventListener('click',playPattern);
+$('clearBtn').addEventListener('click',()=>{ buildGrid(); emitCode(); });
+$('copyBtn').addEventListener('click',()=>{ navigator.clipboard.writeText($('codeOut').textContent); setStatus('Código copiado al portapapeles.',''); });
+$('bars').addEventListener('change',()=>{ buildGrid(); emitCode(); });
+$('thresh').addEventListener('input',()=>{ $('threshVal').textContent=$('thresh').value; manualThresh=null; updateThreshDisplay(); });
+$('refract').addEventListener('input',()=>$('refractVal').textContent=$('refract').value);
+$('decayConf').addEventListener('input',()=>$('decayConfVal').textContent=$('decayConf').value);
+$('resetCountBtn').addEventListener('click',()=>{ hitCount=0; $('hitCount').textContent='0'; $('eventLog').innerHTML=''; });
+$('bdCut').addEventListener('input',()=>$('bdCutVal').textContent=$('bdCut').value);
+$('hhCut').addEventListener('input',()=>$('hhCutVal').textContent=$('hhCut').value);
+$('bpm').addEventListener('change',()=>{ if(pulseOn){ stopPulse(); togglePulse(); } });
+
+// --- selector de modo: mostrar/ocultar controles relevantes ---
+function applyMode(){
+  mode=$('mode').value;
+  const free=mode==='freestyle';
+  $('metroWrap').style.display=free?'none':'';
+  $('freeDurWrap').style.display=free?'':'none';
+  $('recBtn').textContent = free ? '▶ Grabar libre' : '▶ Grabar';
+  if(!free) $('analysisPanel').style.display='none';
+}
+$('mode').addEventListener('change',applyMode);
+
+// --- botones del panel de análisis ---
+$('halfBtn').addEventListener('click',()=>rescaleTempo(0.5));
+$('doubleBtn').addEventListener('click',()=>rescaleTempo(2));
+$('applyBpmBtn').addEventListener('click',()=>{ setStatus('BPM '+$('bpm').value+' aplicado al patrón. Puedes escucharlo o copiar el código.',''); });
+$('loopChk').addEventListener('change',()=>{ if(isPlaying && $('loopChk').checked){ /* el siguiente ciclo ya continuará; nada que hacer */ } });
+
+applyMode();
+buildGrid(); emitCode();
+</script>
+</body>
+</html>

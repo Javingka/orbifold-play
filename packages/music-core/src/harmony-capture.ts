@@ -4,6 +4,7 @@
 
 import { createFiniteTonnetz, type FiniteTonnetzFace, type TonnetzQuality } from './finite-tonnetz';
 import type { HarmonyDuration } from './harmony-duration';
+import { segmentNotes as segmentPyinTrack, trackPitch } from './pyin';
 import { SCALE_INTERVALS, type ScaleMode } from './scales';
 
 export interface PitchFrame {
@@ -478,6 +479,42 @@ function faceFor(rootPc: number, quality: TonnetzQuality): FiniteTonnetzFace {
   const face = FACE_BY_ID.find((candidate) => candidate.rootPc === rootPc && candidate.quality === quality);
   if (!face) throw new Error(`Missing finite Tonnetz face ${rootPc}:${quality}`);
   return face;
+}
+
+export interface PyinCaptureOptions {
+  maximumHz?: number;
+  minimumHz?: number;
+  /** Ambient RMS gate measured during calibration. */
+  rmsThreshold?: number;
+}
+
+/**
+ * ADR 0031 capture pipeline: pYIN Viterbi tracking plus onset-aware note
+ * segmentation, mapped onto the Phase 01 frame/note contracts so the
+ * key/tempo/fold/edit stages stay unchanged. `aperiodicity` carries
+ * `1 - voicedProbability` for the decoded frames.
+ */
+export function extractPyinCapture(
+  samples: ArrayLike<number>,
+  sampleRate: number,
+  options: PyinCaptureOptions = {},
+): { frames: PitchFrame[]; notes: CapturedRootNote[] } {
+  const pyinFrames = trackPitch(samples, sampleRate, {
+    maximumHz: options.maximumHz ?? 3_000,
+    minimumHz: options.minimumHz ?? 65,
+  });
+  const notes = segmentPyinTrack(pyinFrames, {
+    ...(options.rmsThreshold === undefined ? {} : { rmsThreshold: options.rmsThreshold }),
+  });
+  const frames = pyinFrames.map(
+    (frame): PitchFrame => ({
+      aperiodicity: 1 - frame.voicedProbability,
+      midi: frame.midi,
+      rms: frame.rms,
+      time: frame.time,
+    }),
+  );
+  return { frames, notes };
 }
 
 /** Fold repeated notes into a candidate progression, following `fold()`/`quantize()`. */
