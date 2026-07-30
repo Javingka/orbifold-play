@@ -5,11 +5,16 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { FlexiPreviewButton } from '@/components/flexi-preview-button';
 import { CaptureTempoSlider } from '@/components/capture-tempo-slider';
+import { RollingCounter } from '@/components/rolling-counter';
+import { SensitivitySlider } from '@/components/sensitivity-slider';
 import {
   captureRhythm,
+  type CapturedRhythmBuffer,
   type RhythmCapturePhase,
   type RhythmCaptureProgress,
 } from '@/packages/audio/src/rhythm-capture';
+import { loadSensitivity, saveSensitivity } from '@/packages/audio/src/sensitivity-store';
+import { analyzeRhythmBufferDetailed } from '@/packages/music-core/src/rhythm-detection';
 import {
   setCaptureTempo,
   setCapturedStep,
@@ -68,22 +73,36 @@ export function RhythmCaptureDialog({
   const [error, setError] = useState('');
   const [previewPlaying, setPreviewPlaying] = useState(false);
   const [detectedBpm, setDetectedBpm] = useState<number | null>(null);
+  const [sensitivity, setSensitivity] = useState(0.5);
+  const [capturedBuffer, setCapturedBuffer] = useState<CapturedRhythmBuffer | null>(null);
+  const [detectedCount, setDetectedCount] = useState(0);
+  // True when re-detection at the current sensitivity found too few hits to
+  // form a pattern; the shown pattern is then stale, so apply/preview are held.
+  const [reanalysisTooFew, setReanalysisTooFew] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  // Keep the live sensitivity readable inside capture callbacks.
+  const sensitivityRef = useRef(0.5);
   // Gesture responders can outlive a render. Keep audition state in a ref so
   // moving the BPM slider always retimes an already-playing preview.
   const previewPlayingRef = useRef(false);
 
   useEffect(() => {
-    if (!visible) {
-      abortRef.current?.abort();
-      onStopPreview();
-      previewPlayingRef.current = false;
-      setPreviewPlaying(false);
-      setState('intro');
-      setAnalysis(null);
-      setProgress(null);
-      setLastLane(null);
+    if (visible) {
+      // Preload the remembered per-voice sensitivity when the dialog opens.
+      const stored = loadSensitivity();
+      sensitivityRef.current = stored;
+      setSensitivity(stored);
+      return;
     }
+    abortRef.current?.abort();
+    onStopPreview();
+    previewPlayingRef.current = false;
+    setPreviewPlaying(false);
+    setState('intro');
+    setAnalysis(null);
+    setProgress(null);
+    setLastLane(null);
+    setCapturedBuffer(null);
   }, [onStopPreview, visible]);
 
   if (!visible) return null;
@@ -98,7 +117,13 @@ export function RhythmCaptureDialog({
     try {
       const result = await captureRhythm({
         captureSeconds: 10,
+        sensitivity: sensitivityRef.current,
         signal: controller.signal,
+        onCaptured: (buffer, onsetCount) => {
+          setCapturedBuffer(buffer);
+          setDetectedCount(onsetCount);
+          setReanalysisTooFew(false);
+        },
         onHit: (lane) => {
           setLastLane(lane);
           setTimeout(() => setLastLane((current) => (current === lane ? null : current)), 130);
@@ -123,8 +148,42 @@ export function RhythmCaptureDialog({
     }
   };
 
+  // Re-detect the already-recorded buffer at a new sensitivity (ADR 0035): no
+  // re-recording, a single offline pass on the same PCM yields both the count
+  // and the pattern.
+  const changeSensitivity = (next: number): void => {
+    sensitivityRef.current = next;
+    setSensitivity(next);
+    if (!capturedBuffer) return;
+    const { analysis: reanalyzed, onsetCount } = analyzeRhythmBufferDetailed(
+      capturedBuffer.samples,
+      capturedBuffer.sampleRate,
+      capturedBuffer.captureSeconds,
+      { ambientFloor: capturedBuffer.ambientFloor, sensitivity: next },
+    );
+    setDetectedCount(onsetCount);
+    if (reanalyzed) {
+      setReanalysisTooFew(false);
+      setAnalysis(reanalyzed);
+      setDetectedBpm(reanalyzed.bpm);
+      if (previewPlayingRef.current) onPreview(reanalyzed);
+    } else {
+      // Too few hits at this sensitivity: the last pattern is now stale, so
+      // stop the preview and hold apply until the count recovers.
+      setReanalysisTooFew(true);
+      if (previewPlayingRef.current) {
+        onPausePreview();
+        previewPlayingRef.current = false;
+        setPreviewPlaying(false);
+      }
+    }
+  };
+
   const close = (): void => {
     abortRef.current?.abort();
+    // Remember the tuned sensitivity even when closing without confirming, so
+    // calibration- or review-time tuning survives across sessions.
+    saveSensitivity(sensitivityRef.current);
     onStopPreview();
     previewPlayingRef.current = false;
     setPreviewPlaying(false);
@@ -233,17 +292,22 @@ export function RhythmCaptureDialog({
 
       {activeCapture ? (
         <View style={[styles.body, styles.captureBody]}>
-          <Text style={styles.phaseLabel}>
-            {state === 'permission'
-              ? 'WAITING FOR MICROPHONE'
-              : state === 'calibrating'
-                ? 'STAY QUIET · CALIBRATING'
-                : state === 'countdown'
-                  ? `GET READY · ${progress?.secondsLeft.toFixed(0) ?? 3}`
+          {state === 'countdown' ? (
+            <View style={styles.countdownBlock}>
+              <Text style={styles.countdownLabel}>GET READY</Text>
+              <RollingCounter fontSize={64} value={Math.ceil(progress?.secondsLeft ?? 3)} />
+            </View>
+          ) : (
+            <Text style={styles.phaseLabel}>
+              {state === 'permission'
+                ? 'WAITING FOR MICROPHONE'
+                : state === 'calibrating'
+                  ? 'STAY QUIET · CALIBRATING'
                   : state === 'analyzing'
                     ? 'ANALYZING · BUILDING PATTERN'
                     : `RECORDING · ${Math.ceil(progress?.secondsLeft ?? 10)}S`}
-          </Text>
+            </Text>
+          )}
           <View style={styles.meter}>
             <View style={[styles.meterFill, { width: meterWidth }]} />
             <View style={styles.threshold} />
@@ -332,6 +396,13 @@ export function RhythmCaptureDialog({
               </View>
             ))}
           </View>
+          {capturedBuffer && state === 'result' ? (
+            <SensitivitySlider
+              detectedCount={detectedCount}
+              onValueChange={changeSensitivity}
+              value={sensitivity}
+            />
+          ) : null}
           <View style={styles.tempoSection}>
             <CaptureTempoSlider
               detectedBpm={detectedBpm ?? analysis.bpm}
@@ -366,6 +437,9 @@ export function RhythmCaptureDialog({
                   </Pressable>
                   <Pressable
                     onPress={() => {
+                      // Remember the tuned sensitivity as the per-voice
+                      // reference for next time (device-local scalar, ADR 0035).
+                      saveSensitivity(sensitivityRef.current);
                       onStopPreview();
                       onApply(analysis, applyTempo);
                       onClose();
@@ -396,12 +470,18 @@ export function RhythmCaptureDialog({
                   <Pressable
                     accessibilityLabel="Use captured rhythm"
                     accessibilityRole="button"
+                    disabled={reanalysisTooFew}
                     onPress={() => setState('confirm')}
-                    style={styles.useCompact}
+                    style={[styles.useCompact, reanalysisTooFew && styles.disabled]}
                   >
                     <Text style={styles.useCompactText}>✓ USE</Text>
                   </Pressable>
                 </View>
+                {reanalysisTooFew ? (
+                  <Text style={styles.tooFewNote}>
+                    Too few hits at this sensitivity — raise it until the pattern returns.
+                  </Text>
+                ) : null}
               </>
             )}
           </View>
@@ -454,6 +534,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#F7F8FF',
   },
   primaryText: { color: '#08090C', fontSize: 9, fontWeight: '900', letterSpacing: 1 },
+  countdownBlock: { alignItems: 'center', gap: 6 },
+  countdownLabel: { color: '#71809A', fontSize: 9, fontWeight: '900', letterSpacing: 2 },
   privacy: { color: '#586476', textAlign: 'center', fontSize: 7, marginTop: 7 },
   error: { color: '#E87BAC', fontSize: 9, lineHeight: 13, marginTop: 5 },
   captureBody: { alignItems: 'center' },
@@ -539,6 +621,7 @@ const styles = StyleSheet.create({
   },
   applyTempoText: { color: '#DCE2ED', fontSize: 7, fontWeight: '800', letterSpacing: 0.6 },
   twoBarNote: { color: '#687587', fontSize: 6.5, textAlign: 'center', marginTop: 6 },
+  tooFewNote: { color: '#E87BAC', fontSize: 6.5, textAlign: 'center', marginTop: 8 },
   resultActions: { marginTop: 22 },
   transportDock: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
   confirmRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 9 },
