@@ -27,6 +27,13 @@ export interface OnsetDetectionOptions {
   refractorySeconds?: number;
   /** Absolute RMS floor; onset windows quieter than this are ignored. */
   rmsFloor?: number;
+  /**
+   * Rising-energy gate strength (ADR 0035): the RMS envelope must rise into a
+   * novelty peak by at least this ratio for it to count as an onset, which
+   * rejects the extra onsets a single sustained sound would otherwise spawn.
+   * 1 = must be rising; higher = sharper attack required; ≤ 0 disables it.
+   */
+  minRiseRatio?: number;
 }
 
 // beatbox-lab_7.html classification cutoffs (bdCut 1300, hhCut 4600) and its
@@ -36,9 +43,58 @@ const DEFAULT_FFT_SIZE = 1_024;
 const DEFAULT_HOP_SIZE = 256;
 const DEFAULT_BASS_CUTOFF = 1_300;
 const DEFAULT_HIGH_CUTOFF = 4_600;
-const DEFAULT_REFRACTORY = 0.09;
+// Refractory nudged up from the prototype's 90 ms (still below a 16th note at
+// 120 BPM, 125 ms) so a lip-release sub-peak inside one "bum" is absorbed; the
+// rising-energy gate below handles sustained sounds the refractory cannot.
+const DEFAULT_REFRACTORY = 0.11;
 const DEFAULT_PEAK_DELTA = 0.08;
 const DEFAULT_RMS_FLOOR = 0.006;
+// Require the RMS envelope to be rising into a novelty peak by this ratio
+// (ADR 0035). Strictly above 1 so a flat, constant-energy sustain (nowAvg ==
+// pastAvg) is rejected, not just a decaying one, while a real attack (a sharp
+// RMS rise) clears it comfortably.
+const DEFAULT_MIN_RISE_RATIO = 1.08;
+
+// ─── Detection sensitivity model (ADR 0035) ─────────────────────────────────
+/** Sensitivity that reproduces the calibrated defaults. */
+export const DEFAULT_SENSITIVITY = 0.5;
+
+export interface DetectionSensitivityOptions {
+  minRiseRatio: number;
+  peakDelta: number;
+  refractorySeconds: number;
+  rmsFloor: number;
+}
+
+/** Piecewise-linear through (0 → strict, 0.5 → default, 1 → lenient). */
+function lerp3(sensitivity: number, atLow: number, atMid: number, atHigh: number): number {
+  // A non-finite sensitivity (NaN) must not poison the parameters — an NaN
+  // floor would silently disable every floor check — so fall back to default.
+  const s = Number.isFinite(sensitivity) ? sensitivity : DEFAULT_SENSITIVITY;
+  const t = Math.min(1, Math.max(0, s));
+  return t <= 0.5
+    ? atLow + (atMid - atLow) * (t / 0.5)
+    : atMid + (atHigh - atMid) * ((t - 0.5) / 0.5);
+}
+
+/**
+ * Map one sensitivity scalar (0..1, default 0.5) to the four peak-picking
+ * parameters. Every parameter moves monotonically with sensitivity so the
+ * resulting onset count is non-decreasing: a higher value lowers the floor,
+ * refractory, peak delta, and rise ratio, admitting more onsets; 0.5
+ * reproduces the calibrated defaults, so a captured groove is unchanged until
+ * the player deliberately moves the control.
+ */
+export function detectionSensitivityOptions(sensitivity: number): DetectionSensitivityOptions {
+  return {
+    minRiseRatio: lerp3(sensitivity, 1.6, DEFAULT_MIN_RISE_RATIO, 0.6),
+    peakDelta: lerp3(sensitivity, 0.16, DEFAULT_PEAK_DELTA, 0.04),
+    refractorySeconds: lerp3(sensitivity, 0.16, DEFAULT_REFRACTORY, 0.07),
+    // Mid matches the prior effective floor (0.005) so default-sensitivity
+    // capture does not lose soft hits that the old path admitted.
+    rmsFloor: lerp3(sensitivity, 0.022, 0.005, 0.0025),
+  };
+}
 
 // Böck peak-picking neighbourhoods, in seconds.
 const PRE_MAX = 0.03;
@@ -141,11 +197,39 @@ interface OnsetFrame {
   strength: number;
 }
 
+// Rising-energy (re-attack) gate window, in seconds. A true onset is an
+// attack — the RMS envelope rises into it. Spurious extra onsets on one
+// sustained sound (a held "tss") sit on the decay slope where the envelope is
+// falling, so requiring a rise rejects them. This is robust where a fixed
+// "energy dipped below a fraction" valley test is not: a slowly decaying
+// sustain eventually crosses any fixed dip threshold, but its envelope is
+// never rising at the spurious peaks. The comparison uses windowed averages
+// (not two point samples) because a noisy sound's per-frame RMS fluctuates —
+// averaging lets the attack/decay trend, not frame noise, decide. (ADR 0035.)
+const RISE_WINDOW = 0.03;
+
 /** Adaptive peak-picking over the novelty curve (Böck et al. 2012). */
 export function pickOnsetFrames(
   novelty: Float64Array,
   frameDuration: number,
-  options: { peakDelta: number; refractorySeconds: number },
+  options: {
+    peakDelta: number;
+    refractorySeconds: number;
+    /** RMS-per-frame envelope; enables the rising-energy gate when provided. */
+    rms?: ArrayLike<number>;
+    /**
+     * Minimum ratio rms[peak] / rms[peak − RISE_WINDOW] for a novelty peak to
+     * count as an onset. 1 = must be rising; > 1 requires a sharper attack;
+     * ≤ 0 or absent disables the gate.
+     */
+    minRiseRatio?: number;
+    /**
+     * RMS floor applied here (not only downstream) when provided, so
+     * sub-floor novelty peaks in lead-in/room noise never become onsets nor
+     * consume the refractory window or first-onset exemption. Requires `rms`.
+     */
+    rmsFloor?: number;
+  },
 ): OnsetFrame[] {
   const frameCount = novelty.length;
   if (frameCount < 3) return [];
@@ -158,10 +242,18 @@ export function pickOnsetFrames(
   const postAvg = Math.max(1, Math.round(POST_AVG / frameDuration));
   const refractoryFrames = Math.max(1, Math.round(options.refractorySeconds / frameDuration));
   const delta = options.peakDelta * maximum;
+  const rms = options.rms;
+  const minRiseRatio = options.minRiseRatio ?? 0;
+  const rmsFloor = options.rmsFloor ?? 0;
+  const riseFrames = Math.max(1, Math.round(RISE_WINDOW / frameDuration));
   const onsets: OnsetFrame[] = [];
   let lastOnset = Number.NEGATIVE_INFINITY;
   for (let i = 0; i < frameCount; i += 1) {
     const value = novelty[i] ?? 0;
+    // Sub-floor room/lead-in noise must not become a candidate at all: a
+    // spurious floor peak would otherwise claim the first-onset exemption and
+    // start the refractory clock, suppressing the real attack that follows.
+    if (rmsFloor > 0 && rms && (rms[i] ?? 0) < rmsFloor) continue;
     let isLocalMax = true;
     for (let j = Math.max(0, i - preMax); j <= Math.min(frameCount - 1, i + postMax); j += 1) {
       if ((novelty[j] ?? 0) > value) {
@@ -177,10 +269,31 @@ export function pickOnsetFrames(
       count += 1;
     }
     const localMean = count > 0 ? sum / count : 0;
-    if (value >= localMean + delta && value > 0 && i - lastOnset >= refractoryFrames) {
-      onsets.push({ frame: i, strength: value });
-      lastOnset = i;
+    if (value < localMean + delta || value <= 0 || i - lastOnset < refractoryFrames) continue;
+    // Rising-energy gate: reject a novelty peak whose RMS envelope is not
+    // rising into it (a fluctuation on a decaying sustain), keeping genuine
+    // re-attacks. The first onset (lastOnset === −∞) is always eligible.
+    // Compare the mean RMS over the window ending at the peak against the mean
+    // over the preceding window, so frame-to-frame noise does not decide.
+    if (minRiseRatio > 0 && rms && Number.isFinite(lastOnset)) {
+      let nowSum = 0;
+      let nowCount = 0;
+      for (let j = Math.max(0, i - riseFrames + 1); j <= i; j += 1) {
+        nowSum += rms[j] ?? 0;
+        nowCount += 1;
+      }
+      let pastSum = 0;
+      let pastCount = 0;
+      for (let j = Math.max(0, i - 2 * riseFrames + 1); j <= Math.max(0, i - riseFrames); j += 1) {
+        pastSum += rms[j] ?? 0;
+        pastCount += 1;
+      }
+      const nowAvg = nowCount > 0 ? nowSum / nowCount : 0;
+      const pastAvg = pastCount > 0 ? pastSum / pastCount : 0;
+      if (nowAvg < minRiseRatio * pastAvg) continue;
     }
+    onsets.push({ frame: i, strength: value });
+    lastOnset = i;
   }
   return onsets;
 }
@@ -514,11 +627,18 @@ export function detectOnsets(
   const refractorySeconds = options.refractorySeconds ?? DEFAULT_REFRACTORY;
   const peakDelta = options.peakDelta ?? DEFAULT_PEAK_DELTA;
   const rmsFloor = options.rmsFloor ?? DEFAULT_RMS_FLOOR;
+  const minRiseRatio = options.minRiseRatio ?? DEFAULT_MIN_RISE_RATIO;
   if (sampleRate <= 0 || samples.length < fftSize * 2) return [];
 
   const { novelty, rms } = spectralFlux(samples, fftSize, hopSize, sampleRate);
   const frameDuration = hopSize / sampleRate;
-  const frames = pickOnsetFrames(novelty, frameDuration, { peakDelta, refractorySeconds });
+  const frames = pickOnsetFrames(novelty, frameDuration, {
+    peakDelta,
+    refractorySeconds,
+    rms,
+    minRiseRatio,
+    rmsFloor,
+  });
   const onsets: CaptureOnset[] = [];
   for (const { frame } of frames) {
     if ((rms[frame] ?? 0) < rmsFloor) continue;
