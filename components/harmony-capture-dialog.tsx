@@ -6,6 +6,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CaptureTempoSlider } from '@/components/capture-tempo-slider';
 import { FlexiPreviewButton } from '@/components/flexi-preview-button';
 import { HarmonyCaptureRoll } from '@/components/harmony-capture-roll';
+import { RollingCounter } from '@/components/rolling-counter';
 import { HarmonyCaptureSheet } from '@/components/harmony-capture-sheet';
 import {
   captureHarmony,
@@ -150,7 +151,14 @@ export function HarmonyCaptureDialog({
         ) : null}
         {active ? (
           <View style={styles.center}>
-            <Text style={styles.phase}>{state === 'permission' ? 'WAITING FOR MICROPHONE' : state === 'calibrating' ? 'STAY QUIET · CALIBRATING' : state === 'countdown' ? `GET READY · ${progress?.secondsLeft.toFixed(0) ?? 3}` : state === 'recording' ? `RECORDING · ${Math.ceil(progress?.secondsLeft ?? 12)}S` : 'ANALYZING ROOTS'}</Text>
+            {state === 'countdown' ? (
+              <View style={styles.countdownBlock}>
+                <Text style={styles.countdownLabel}>GET READY</Text>
+                <RollingCounter fontSize={64} value={Math.ceil(progress?.secondsLeft ?? 3)} />
+              </View>
+            ) : (
+              <Text style={styles.phase}>{state === 'permission' ? 'WAITING FOR MICROPHONE' : state === 'calibrating' ? 'STAY QUIET · CALIBRATING' : state === 'recording' ? `RECORDING · ${Math.ceil(progress?.secondsLeft ?? 12)}S` : 'ANALYZING ROOTS'}</Text>
+            )}
             <Text style={styles.livePitch}>{pitch === null ? '—' : `${NAMES[((pitch % 12) + 12) % 12]}${Math.floor(pitch / 12) - 1}`}</Text>
             <View style={styles.meter}><View style={[styles.meterFill, { width: `${Math.min(100, level * 1800)}%` }]} /></View>
             <Text style={styles.note}>Keep the same root order each time. The countdown does not impose your tempo.</Text>
@@ -233,6 +241,8 @@ const styles = StyleSheet.create({
   primaryText: { color: '#08090C', fontSize: 9, fontWeight: '900', letterSpacing: 1 },
   privacy: { color: '#586476', textAlign: 'center', fontSize: 7, marginTop: 8 },
   phase: { color: '#F7F8FF', textAlign: 'center', fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
+  countdownBlock: { alignItems: 'center', gap: 6 },
+  countdownLabel: { color: '#71809A', fontSize: 9, fontWeight: '900', letterSpacing: 2 },
   livePitch: { color: '#F3B15A', textAlign: 'center', fontSize: 48, fontWeight: '700', marginVertical: 20 },
   meter: { height: 10, borderRadius: 5, overflow: 'hidden', backgroundColor: '#151B24' }, meterFill: { height: '100%', backgroundColor: '#56CFC4' },
   actions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 14 },

@@ -4,12 +4,16 @@
 // with the legacy ScriptProcessor path as a fallback, and onsets are detected
 // offline from the complete recorded PCM by the pure spectral-flux engine
 // instead of a live envelope state machine.
-import {
-  analyzeRhythmCapture,
-  type CaptureLane,
-  type RhythmCaptureAnalysis,
-} from '@/packages/music-core/src/rhythm-capture';
-import { detectOnsets } from '@/packages/music-core/src/onset-detection';
+import { type CaptureLane, type RhythmCaptureAnalysis } from '@/packages/music-core/src/rhythm-capture';
+import { analyzeRhythmBufferDetailed } from '@/packages/music-core/src/rhythm-detection';
+
+/** Recorded PCM handed back so the UI can re-detect at a new sensitivity. */
+export interface CapturedRhythmBuffer {
+  ambientFloor: number;
+  captureSeconds: number;
+  sampleRate: number;
+  samples: Float32Array;
+}
 
 export type RhythmCapturePhase = 'permission' | 'calibrating' | 'countdown' | 'recording' | 'analyzing';
 
@@ -21,9 +25,16 @@ export interface RhythmCaptureProgress {
 
 export interface CaptureRhythmOptions {
   captureSeconds?: number;
+  /**
+   * Recorded PCM + the onset count at the capture sensitivity, so the review
+   * UI can show "N hits" and re-detect without re-recording or re-detecting.
+   */
+  onCaptured?: (buffer: CapturedRhythmBuffer, onsetCount: number) => void;
   onHit?: (lane: CaptureLane) => void;
   onLevel?: (level: number, threshold: number) => void;
   onProgress?: (progress: RhythmCaptureProgress) => void;
+  /** Detection sensitivity 0..1 (default 0.5); higher admits more onsets. */
+  sensitivity?: number;
   signal?: AbortSignal;
 }
 
@@ -273,14 +284,18 @@ export async function captureRhythm(
       samples.set(chunk, sampleOffset);
       sampleOffset += chunk.length;
     }
-    const onsets = detectOnsets(samples, context.sampleRate, {
-      rmsFloor: Math.max(0.005, threshold * 0.6),
+    const ambientFloor = Math.max(0.005, threshold * 0.6);
+    // One detection pass yields both the pattern and the raw onset count.
+    const detail = analyzeRhythmBufferDetailed(samples, context.sampleRate, captureSeconds, {
+      ambientFloor,
+      ...(options.sensitivity !== undefined ? { sensitivity: options.sensitivity } : {}),
     });
-    // Tempo-analysis novelty resolution (~5.8 ms); onset times are already
-    // sample-accurate from the offline detector.
-    const analysis = analyzeRhythmCapture(onsets, 0, captureSeconds, 256 / context.sampleRate);
-    if (!analysis) throw new Error('TOO_FEW_HITS');
-    return analysis;
+    options.onCaptured?.(
+      { ambientFloor, captureSeconds, sampleRate: context.sampleRate, samples },
+      detail.onsetCount,
+    );
+    if (!detail.analysis) throw new Error('TOO_FEW_HITS');
+    return detail.analysis;
   } finally {
     backend.detach();
     source.disconnect();

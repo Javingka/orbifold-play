@@ -3,6 +3,7 @@ import type { CaptureRhythmOptions } from './rhythm-capture.web';
 import type { RhythmCaptureAnalysis } from '@/packages/music-core/src/rhythm-capture';
 
 export type {
+  CapturedRhythmBuffer,
   CaptureRhythmOptions,
   RhythmCapturePhase,
   RhythmCaptureProgress,

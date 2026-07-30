@@ -53,17 +53,16 @@ code.
 Completed mobile initiatives include the first playable instrument,
 fluid Tonnetz, scale dialog, chord-duration interactions, rhythm-sound
 interactions, rhythm capture through Phase 02, harmony capture through
-Phase 02, and detection uplift Phase 01 (segment-feature percussion lane
-classification, ADR 0034).
+Phase 02, detection uplift Phase 01 (segment-feature percussion lane
+classification, ADR 0034), and detection uplift Phase 02 (rhythm
+over-detection fix via a rising-energy onset gate plus a detection-sensitivity
+control, ADR 0035).
 
 Deferred work currently includes:
 
 - optional neural pitch tracking after a dependency/model-size decision;
-- simultaneous multi-lane onset splitting for coincident percussion (the
-  candidate detection-uplift Phase 02);
-- long sustained-sibilant onsets can defeat the ADR 0032 peak-picker's
-  local-mean test (a detection-stage limitation surfaced during
-  detection-uplift Phase 01);
+- simultaneous multi-lane onset splitting for coincident percussion (a
+  candidate later detection-uplift phase);
 - an optional hybrid backend "pro" detection service, only if a client-side
   accuracy ceiling justifies the hosting/privacy cost (detection-uplift
   inventory Option B, not scoped).
