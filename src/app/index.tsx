@@ -88,7 +88,7 @@ const INITIAL_RHYTHM_LAYERS: readonly AppRhythmLayer[] = [
     color: '#f3b15a',
     steps: bjorklund(4, 16),
     role: 'pulse',
-    soundId: 'hybrid',
+    soundId: 'kit',
     audioOrbit: 2,
   },
   {
@@ -97,7 +97,7 @@ const INITIAL_RHYTHM_LAYERS: readonly AppRhythmLayer[] = [
     color: '#56cfc4',
     steps: bjorklund(5, 12),
     role: 'click',
-    soundId: 'hybrid',
+    soundId: 'kit',
     audioOrbit: 3,
   },
   {
@@ -106,7 +106,7 @@ const INITIAL_RHYTHM_LAYERS: readonly AppRhythmLayer[] = [
     color: '#e87bac',
     steps: bjorklund(3, 8),
     role: 'air',
-    soundId: 'hybrid',
+    soundId: 'kit',
     audioOrbit: 4,
   },
 ];

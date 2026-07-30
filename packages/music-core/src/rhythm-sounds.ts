@@ -4,7 +4,7 @@
 export type RhythmOrbitRole = 'pulse' | 'click' | 'air';
 
 export type RhythmSoundId =
-  'hybrid' | 'cajon' | 'conga' | 'wood' | 'shaker' | 'sub' | 'digital' | 'noise';
+  'kit' | 'hybrid' | 'cajon' | 'conga' | 'wood' | 'shaker' | 'sub' | 'digital' | 'noise';
 
 interface RhythmSoundBase {
   id: RhythmSoundId;
@@ -14,6 +14,11 @@ interface RhythmSoundBase {
 
 export interface HybridRhythmSound extends RhythmSoundBase {
   kind: 'hybrid';
+}
+
+/** Role-aware synthesized drum kit: kick / snare / hat per orbit role. */
+export interface KitRhythmSound extends RhythmSoundBase {
+  kind: 'kit';
 }
 
 export interface SampleRhythmSound extends RhythmSoundBase {
@@ -41,9 +46,15 @@ export interface SynthRhythmSound extends RhythmSoundBase {
   pan: number;
 }
 
-export type RhythmSoundOption = HybridRhythmSound | SampleRhythmSound | SynthRhythmSound;
+export type RhythmSoundOption =
+  | HybridRhythmSound
+  | KitRhythmSound
+  | SampleRhythmSound
+  | SynthRhythmSound;
 
 export const RHYTHM_SOUND_OPTIONS = [
+  // First entry is the app default (getRhythmSoundOption falls back to it).
+  { id: 'kit', kind: 'kit', title: 'KIT', subtitle: 'KICK SNARE HAT' },
   { id: 'hybrid', kind: 'hybrid', title: 'HYBRID', subtitle: 'ORGANIC + SYNTH' },
   {
     id: 'cajon',
