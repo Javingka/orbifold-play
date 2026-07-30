@@ -20,6 +20,7 @@ must not be restored or recreated here.
 - `rhythm-sound-lab/` — rhythm sound interaction
 - `rhythm-capture/` — microphone rhythm capture
 - `harmony-capture/` — microphone harmony capture
+- `detection-uplift/` — segment-feature percussion lane classification
 
 Each new initiative must use `inventories/`, `phases/`, and `handoffs/`.
 Planning-time statements such as “proposed” or “pending” remain historical;
