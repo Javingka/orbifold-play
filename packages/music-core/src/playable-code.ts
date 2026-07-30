@@ -112,6 +112,34 @@ function synthRhythmPattern(layer: PlayableRhythmLayer, sound: SynthRhythmSound)
   return `note("${notes}").s("${sound.instrument}").velocity("${velocity}").gain(${sound.gain}).attack(0.001).decay(${sound.decay}).sustain(0).release(0.03).hpf(${sound.hpf}).lpf(${sound.lpf}).room(${sound.room}).roomsize(${sound.roomSize}).pan(${sound.pan}).compressor("-18:4:6:.003:.08").orbit(${layer.audioOrbit})`;
 }
 
+// Synthesized drum kit (no sample assets): a pitch-enveloped sine kick, a
+// tone-plus-noise snare, and a short high-passed noise hat. Role-aware like
+// the hybrid recipe, so one selected "KIT" sound voices all three orbits.
+function kitRhythmPattern(layer: PlayableRhythmLayer): string {
+  const velocity = velocityPattern(layer.steps);
+  const sources: Record<RhythmOrbitRole, readonly string[]> = {
+    pulse: [
+      `note("${noteTokens(layer.steps, 'c1')}").s("sine").gain(0.5).attack(0.001).decay(0.24).sustain(0).release(0.03).penv(24).pdecay(0.05)`,
+      `note("${noteTokens(layer.steps, 'c5')}").s("white").gain(0.02).attack(0.001).decay(0.012).sustain(0).release(0.01)`,
+    ],
+    click: [
+      `note("${noteTokens(layer.steps, 'd3')}").s("triangle").gain(0.22).attack(0.001).decay(0.11).sustain(0).release(0.03)`,
+      `note("${noteTokens(layer.steps, 'c5')}").s("white").gain(0.06).attack(0.001).decay(0.14).sustain(0).release(0.05)`,
+    ],
+    air: [
+      `note("${noteTokens(layer.steps, 'c6')}").s("white").gain(0.05).attack(0.001).decay(0.035).sustain(0).release(0.02)`,
+    ],
+  };
+  const effects: Record<RhythmOrbitRole, string> = {
+    pulse: '.hpf(25).lpf(3200).room(0.06).roomsize(1.4).pan(0.5)',
+    click: '.hpf(160).lpf(9000).room(0.16).roomsize(1.9).pan(0.45)',
+    air: '.hpf(6500).lpf(14000).room(0.2).roomsize(2.6).pan(0.55)',
+  };
+  const layers = sources[layer.role];
+  const voice = layers.length === 1 ? layers[0] : `stack(${layers.join(',')})`;
+  return `${voice}.velocity("${velocity}")${effects[layer.role]}.compressor("-18:4:6:.003:.08").orbit(${layer.audioOrbit})`;
+}
+
 function hybridRhythmPattern(layer: PlayableRhythmLayer): string {
   const velocity = velocityPattern(layer.steps);
   const sources: Record<RhythmOrbitRole, readonly [string, string]> = {
@@ -141,6 +169,7 @@ export function rhythmPattern(layer: PlayableRhythmLayer): string {
   const sound = getRhythmSoundOption(layer.soundId);
   if (sound.kind === 'sample') return sampleRhythmPattern(layer, sound);
   if (sound.kind === 'synth') return synthRhythmPattern(layer, sound);
+  if (sound.kind === 'kit') return kitRhythmPattern(layer);
   return hybridRhythmPattern(layer);
 }
 

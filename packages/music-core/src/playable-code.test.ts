@@ -96,4 +96,25 @@ describe('mobile playable Strudel codegen', () => {
     expect(code).not.toContain('.fast');
     expect(code).not.toContain('.slow');
   });
+
+  it('voices the synthesized kit per role without sample assets', () => {
+    const kick = rhythmPattern({ steps: [1, 0, 0, 0], soundId: 'kit', role: 'pulse', audioOrbit: 2 });
+    // Pitch-enveloped sine kick, no sample token.
+    expect(kick).toContain('.s("sine")');
+    expect(kick).toContain('.penv(24)');
+    expect(kick).not.toContain('cajon');
+    expect(kick).toContain('.orbit(2)');
+
+    const snare = rhythmPattern({ steps: [1, 0, 0, 0], soundId: 'kit', role: 'click', audioOrbit: 3 });
+    expect(snare).toContain('stack(');
+    expect(snare).toContain('.s("white")');
+
+    const hat = rhythmPattern({ steps: [1, 0, 0, 0], soundId: 'kit', role: 'air', audioOrbit: 4 });
+    expect(hat).toContain('.hpf(6500)');
+
+    for (const code of [kick, snare, hat]) {
+      expect(code).not.toContain('.fast');
+      expect(code).not.toContain('.slow');
+    }
+  });
 });

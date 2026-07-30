@@ -11,10 +11,14 @@ import { fftInPlace } from './fft';
 import type { CaptureLane, CaptureOnset } from './rhythm-capture';
 
 export interface OnsetDetectionOptions {
-  /** centroid (Hz) below which, with low ZCR, an onset is a low/pulse hit. */
+  /**
+   * Prototype-rule bass cutoff (Hz). Since ADR 0034 `detectOnsets` classifies
+   * with `classifySegmentLane`; this option only parameterizes the exported
+   * baseline `classifyLane` and is kept for API stability.
+   */
   bassCutoffHz?: number;
   fftSize?: number;
-  /** centroid (Hz) above which an onset is an air/high hit. */
+  /** Prototype-rule air cutoff (Hz); same ADR 0034 status as `bassCutoffHz`. */
   highCutoffHz?: number;
   hopSize?: number;
   /** Peak must exceed the local mean flux by this fraction of the flux range. */
@@ -278,10 +282,220 @@ function measureOnsetFeatures(
   };
 }
 
-/** beatbox-lab_7.html emitOnset() lane rule, applied to offline features. */
-function classifyLane(features: OnsetFeatures, bassCutoffHz: number, highCutoffHz: number): CaptureLane {
+// ─── Phase 01 detection-uplift (ADR 0034): onset-segment features ───────────
+// Band edges align with the retained lane semantics: the low band is the
+// spectral-flux kick band (< 160 Hz), and the two prototype centroid cutoffs
+// (1300 / 4600 Hz) split the rest, so each ratio reads as "energy on this
+// side of a boundary the lanes were already tuned against".
+const BAND_LOW_HZ = 160;
+const BAND_LOW_MID_HZ = 1_300;
+const BAND_MID_HZ = 4_600;
+const DECAY_DROP_DB = 20;
+const DECAY_SCAN_SECONDS = 0.25;
+/** Envelope RMS window in seconds so decay resolution is sample-rate free. */
+const DECAY_WINDOW_SECONDS = 0.003;
+const ATTACK_WINDOW_SECONDS = 0.01;
+
+export interface OnsetBandRatios {
+  /** > 4600 Hz. */
+  high: number;
+  /** < 160 Hz. */
+  low: number;
+  /** 160–1300 Hz. */
+  lowMid: number;
+  /** 1300–4600 Hz. */
+  mid: number;
+}
+
+export interface OnsetSegmentFeatures {
+  /**
+   * Post-attack energy against its immediate pre-attack context, in (0, 1]:
+   * ~1 for a hit rising out of silence, ~0.5 inside a sustained sound.
+   */
+  attackSharpness: number;
+  /** Linear-power spectral energy fractions over the four lane bands. */
+  bandRatios: OnsetBandRatios;
+  /** Byte-dB-scaled centroid (Hz), identical to the prototype measurement. */
+  centroid: number;
+  /** Seconds for the post-peak envelope to fall 20 dB (clamped to the scan). */
+  decaySeconds: number;
+  /** Spectral flatness (geometric / arithmetic mean of linear power), 0–1. */
+  flatness: number;
+  /** RMS from the attack peak onward (same value detectOnsets reports). */
+  peak: number;
+  peakSample: number;
+  /** Zero-crossing rate from the attack peak, identical to the prototype. */
+  zcr: number;
+}
+
+/**
+ * Deterministic feature vector over a recorded onset segment. Extends the
+ * prototype's centroid/ZCR pair with linear-power band ratios, spectral
+ * flatness, decay time, and attack sharpness measured from the PCM itself.
+ *
+ * Window scope: band ratios and flatness describe the same fixed
+ * `FEATURE_FFT` attack window the prototype measurement uses (~46 ms at
+ * 44.1 kHz, peak near its start); decay scans a separate 250 ms envelope.
+ * At the extreme first/last window of a buffer the frame is clamped exactly
+ * as the prototype measurement clamps (real captures have countdown lead-in
+ * and trailing room, so onsets never live there in practice).
+ */
+export function measureOnsetSegmentFeatures(
+  samples: ArrayLike<number>,
+  onsetSample: number,
+  sampleRate: number,
+): OnsetSegmentFeatures {
+  const base = measureOnsetFeatures(samples, onsetSample, sampleRate);
+  const { peakSample } = base;
+
+  // Linear power spectrum over the same 2048-sample window the prototype
+  // measurement uses, so band ratios and flatness describe the same segment.
+  const windowStart = Math.max(0, Math.min(peakSample - 256, samples.length - FEATURE_FFT));
+  const window = hannWindow(FEATURE_FFT);
+  const real = new Float64Array(FEATURE_FFT);
+  const imag = new Float64Array(FEATURE_FFT);
+  for (let i = 0; i < FEATURE_FFT; i += 1) {
+    real[i] = (samples[windowStart + i] ?? 0) * (window[i] ?? 0);
+    imag[i] = 0;
+  }
+  fftInPlace(real, imag);
+  const bins = FEATURE_FFT / 2;
+  const binHz = sampleRate / FEATURE_FFT;
+  let lowPower = 0;
+  let lowMidPower = 0;
+  let midPower = 0;
+  let highPower = 0;
+  let logSum = 0;
+  let linearSum = 0;
+  const EPSILON = 1e-12;
+  for (let bin = 1; bin < bins; bin += 1) {
+    const power = (real[bin] ?? 0) ** 2 + (imag[bin] ?? 0) ** 2;
+    const hz = bin * binHz;
+    if (hz < BAND_LOW_HZ) lowPower += power;
+    else if (hz < BAND_LOW_MID_HZ) lowMidPower += power;
+    else if (hz < BAND_MID_HZ) midPower += power;
+    else highPower += power;
+    logSum += Math.log(power + EPSILON);
+    linearSum += power + EPSILON;
+  }
+  const totalPower = lowPower + lowMidPower + midPower + highPower;
+  const safeTotal = totalPower > 0 ? totalPower : 1;
+  const count = bins - 1;
+  // Below the epsilon floor the geometric/arithmetic ratio drifts toward 1
+  // (silence would read "perfectly noise-like"); report 0 instead. Segments
+  // this quiet never reach classification — detectOnsets gates on rmsFloor.
+  const flatness =
+    totalPower > EPSILON * count ? Math.exp(logSum / count) / (linearSum / count) : 0;
+
+  // Decay: short-window RMS envelope from the peak until it falls 20 dB
+  // below its maximum (or the scan window ends).
+  const scanEnd = Math.min(samples.length, peakSample + Math.round(DECAY_SCAN_SECONDS * sampleRate));
+  const decayWindow = Math.max(16, Math.round(DECAY_WINDOW_SECONDS * sampleRate));
+  let envelopePeak = 0;
+  let decaySample = scanEnd;
+  const hop = Math.max(1, Math.floor(decayWindow / 2));
+  const dropRatio = 10 ** (-DECAY_DROP_DB / 20);
+  for (let start = peakSample; start + decayWindow <= scanEnd; start += hop) {
+    let squares = 0;
+    for (let i = 0; i < decayWindow; i += 1) {
+      const value = samples[start + i] ?? 0;
+      squares += value * value;
+    }
+    const rms = Math.sqrt(squares / decayWindow);
+    if (rms > envelopePeak) envelopePeak = rms;
+    else if (envelopePeak > 0 && rms <= envelopePeak * dropRatio) {
+      decaySample = start;
+      break;
+    }
+  }
+  const decaySeconds = Math.max(0, (decaySample - peakSample) / sampleRate);
+
+  // Attack sharpness: 10 ms RMS after the peak vs. the 10 ms of context
+  // ending 10 ms before the peak. The skipped 10 ms is deliberate — it holds
+  // the ambiguous rise itself, which belongs to neither "before" nor
+  // "after". Rising out of silence → ~1; inside sustained sound → ~0.5.
+  // An empty pre-window (onset at the very buffer start) reads as maximally
+  // sharp, the correct bias for a hit with no prior context.
+  const attackSamples = Math.max(1, Math.round(ATTACK_WINDOW_SECONDS * sampleRate));
+  let preSquares = 0;
+  let preCount = 0;
+  for (let i = Math.max(0, peakSample - 2 * attackSamples); i < Math.max(0, peakSample - attackSamples); i += 1) {
+    const value = samples[i] ?? 0;
+    preSquares += value * value;
+    preCount += 1;
+  }
+  let postSquares = 0;
+  let postCount = 0;
+  for (let i = peakSample; i < Math.min(samples.length, peakSample + attackSamples); i += 1) {
+    const value = samples[i] ?? 0;
+    postSquares += value * value;
+    postCount += 1;
+  }
+  const preRms = preCount > 0 ? Math.sqrt(preSquares / preCount) : 0;
+  const postRms = postCount > 0 ? Math.sqrt(postSquares / postCount) : 0;
+  const attackSharpness = postRms + preRms > 0 ? postRms / (postRms + preRms) : 0;
+
+  return {
+    attackSharpness,
+    bandRatios: {
+      high: highPower / safeTotal,
+      low: lowPower / safeTotal,
+      lowMid: lowMidPower / safeTotal,
+      mid: midPower / safeTotal,
+    },
+    centroid: base.centroid,
+    decaySeconds,
+    flatness,
+    peak: base.peak,
+    peakSample,
+    zcr: base.zcr,
+  };
+}
+
+/**
+ * beatbox-lab_7.html emitOnset() lane rule. Kept exported as the tested
+ * comparison baseline for ADR 0034; `detectOnsets` no longer uses it.
+ */
+export function classifyLane(
+  features: { centroid: number; zcr: number },
+  bassCutoffHz: number = DEFAULT_BASS_CUTOFF,
+  highCutoffHz: number = DEFAULT_HIGH_CUTOFF,
+): CaptureLane {
   if (features.centroid < bassCutoffHz && features.zcr < 0.15) return 'pulse';
   if (features.centroid > highCutoffHz || features.zcr > 0.35) return 'air';
+  return 'click';
+}
+
+// ADR 0034 lane scores, hand-calibrated on the deterministic beatbox corpus
+// (onset-classification.test.ts). Linear-power band ratios are velocity-
+// invariant, unlike the byte-dB centroid the prototype rule reads, which
+// moves by more than 3× between soft and loud renderings of the same sound.
+// The mid-band penalty in the air score separates a broadband clap (mid-heavy
+// → click) from a sibilant hat (almost pure high band → air).
+const PULSE_LOW_WEIGHT = 2.2;
+const PULSE_TOP_PENALTY = 0.6;
+const CLICK_LOW_MID_WEIGHT = 1.6;
+const CLICK_MID_WEIGHT = 2.0;
+const AIR_HIGH_WEIGHT = 1.8;
+const AIR_MID_PENALTY = 1.5;
+const AIR_ZCR_WEIGHT = 0.5;
+
+/**
+ * ADR 0034 segment-feature lane classifier. Deterministic weighted scores
+ * over the band-ratio/ZCR features; ties resolve toward `click`, the
+ * prototype's own fallback lane.
+ */
+export function classifySegmentLane(features: OnsetSegmentFeatures): CaptureLane {
+  const { bandRatios, zcr } = features;
+  const pulseScore =
+    PULSE_LOW_WEIGHT * bandRatios.low - PULSE_TOP_PENALTY * (bandRatios.mid + bandRatios.high);
+  const clickScore = CLICK_LOW_MID_WEIGHT * bandRatios.lowMid + CLICK_MID_WEIGHT * bandRatios.mid;
+  const airScore =
+    AIR_HIGH_WEIGHT * bandRatios.high -
+    AIR_MID_PENALTY * bandRatios.mid +
+    AIR_ZCR_WEIGHT * Math.min(1, zcr);
+  if (airScore > clickScore && airScore > pulseScore) return 'air';
+  if (pulseScore > clickScore) return 'pulse';
   return 'click';
 }
 
@@ -297,8 +511,6 @@ export function detectOnsets(
 ): CaptureOnset[] {
   const fftSize = options.fftSize ?? DEFAULT_FFT_SIZE;
   const hopSize = options.hopSize ?? DEFAULT_HOP_SIZE;
-  const bassCutoffHz = options.bassCutoffHz ?? DEFAULT_BASS_CUTOFF;
-  const highCutoffHz = options.highCutoffHz ?? DEFAULT_HIGH_CUTOFF;
   const refractorySeconds = options.refractorySeconds ?? DEFAULT_REFRACTORY;
   const peakDelta = options.peakDelta ?? DEFAULT_PEAK_DELTA;
   const rmsFloor = options.rmsFloor ?? DEFAULT_RMS_FLOOR;
@@ -313,10 +525,13 @@ export function detectOnsets(
     // The flux frame begins up to a window before the transient; the features
     // pass locates the true attack peak and returns it as the onset time.
     const onsetSample = frame * hopSize;
-    const features = measureOnsetFeatures(samples, onsetSample, sampleRate);
+    const features = measureOnsetSegmentFeatures(samples, onsetSample, sampleRate);
     if (features.peak < rmsFloor) continue;
     onsets.push({
-      lane: classifyLane(features, bassCutoffHz, highCutoffHz),
+      // ADR 0034: segment-feature classification. The prototype cutoff rule
+      // stays available as `classifyLane` (and via the bassCutoffHz /
+      // highCutoffHz options, which only that rule reads).
+      lane: classifySegmentLane(features),
       peak: features.peak,
       time: features.peakSample / sampleRate,
     });

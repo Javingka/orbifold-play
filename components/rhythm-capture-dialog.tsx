@@ -213,7 +213,8 @@ export function RhythmCaptureDialog({
           <View style={styles.guide}>
             <Text style={styles.guideNumber}>02</Text>
             <Text style={styles.guideText}>
-              After the neutral countdown, repeat one groove 3–4 times.
+              After the neutral countdown, repeat one groove 3–4 times mixing “bum” (kick),
+              “pa” (snare) and “tss” (hat).
             </Text>
           </View>
           <View style={styles.guide}>
@@ -263,7 +264,7 @@ export function RhythmCaptureDialog({
           </View>
           <Text style={styles.captureHint}>
             {state === 'recording'
-              ? 'Use low, mid and airy sounds. The lights show how each hit is classified.'
+              ? 'Say “bum” for kick, “pa” for snare, “tss” for hat. The lights show how each hit is classified.'
               : 'The countdown does not impose a tempo. You define the pulse.'}
           </Text>
           <View style={styles.progressTrack}>
